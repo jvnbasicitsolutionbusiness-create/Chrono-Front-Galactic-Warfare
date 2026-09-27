@@ -5,30 +5,26 @@
  * File: ./public/js/auth.js
  * ============================================================
  *
- * FEATURES:
- * - Login
- * - Registration
+ * Features:
+ * - Login and registration
  * - Client-side validation
  * - Password strength indicator
  * - Session persistence
- * - Authentication verification
+ * - Server-side session verification
  * - Error handling
  *
- * BACKEND:
+ * Backend endpoints:
  * POST /api/auth/register
  * POST /api/auth/login
  * POST /api/auth/verify
- *
- * IMPORTANT:
- * Configure API_BASE with your deployed Express backend URL.
  */
 
 "use strict";
 
 (() => {
-  /* ==========================================================
-     CONFIGURATION
-  ========================================================== */
+  // ==========================================================
+  // CONFIGURATION
+  // ==========================================================
 
   const TOKEN_KEY = "gw_session_token";
   const LEGACY_TOKEN_KEY = "gw_id_token";
@@ -36,27 +32,16 @@
 
   const REDIRECT_URL = "./index.html";
 
-  /*
-   * IMPORTANT:
-   *
-   * Replace this with your actual deployed Express backend URL.
-   *
-   * Example:
-   * const API_BASE = "https://your-backend.onrender.com";
-   *
-   * Do not use localhost for a publicly deployed website.
-   */
+  // IMPORTANT:
+  // Use your deployed Express backend's ROOT URL.
+  // Do not include /api/auth here.
+  const API_BASE = "https://YOUR-BACKEND-URL";
 
-  /* =========================================================
-   BACKEND CONFIGURATION
-========================================================= */
-
-  const API_BASE = "https://YOUR-ACTUAL-BACKEND-URL";
   const API_TIMEOUT = 20000;
 
-  /* ==========================================================
-     DOM ELEMENTS
-  ========================================================== */
+  // ==========================================================
+  // DOM ELEMENTS
+  // ==========================================================
 
   const $ = (id) => document.getElementById(id);
 
@@ -84,9 +69,9 @@
     regBtn: $("regBtn")
   };
 
-  /* ==========================================================
-     INITIALIZATION
-  ========================================================== */
+  // ==========================================================
+  // INITIALIZATION
+  // ==========================================================
 
   document.addEventListener("DOMContentLoaded", initialize);
 
@@ -113,9 +98,9 @@
     clearSession();
   }
 
-  /* ==========================================================
-     TAB SWITCHING
-  ========================================================== */
+  // ==========================================================
+  // TAB SWITCHING
+  // ==========================================================
 
   function bindTabs() {
     elements.tabLogin?.addEventListener("click", () => {
@@ -168,9 +153,9 @@
     clearStatus(elements.regStatus);
   }
 
-  /* ==========================================================
-     FORM EVENTS
-  ========================================================== */
+  // ==========================================================
+  // FORM EVENTS
+  // ==========================================================
 
   function bindForms() {
     elements.formLogin?.addEventListener("submit", async (event) => {
@@ -184,9 +169,9 @@
     });
   }
 
-  /* ==========================================================
-     PASSWORD STRENGTH
-  ========================================================== */
+  // ==========================================================
+  // PASSWORD STRENGTH
+  // ==========================================================
 
   function bindPasswordStrength() {
     elements.regPassword?.addEventListener("input", () => {
@@ -221,21 +206,23 @@
       score > 0 ? colors[score - 1] : "transparent";
   }
 
-  /* ==========================================================
-     API REQUEST
-  ========================================================== */
+  // ==========================================================
+  // API REQUEST
+  // ==========================================================
 
   async function apiPost(endpoint, payload) {
+    const base = API_BASE.trim().replace(/\/+$/, "");
+
     if (
-      !API_BASE ||
-      API_BASE.includes("YOUR-BACKEND-DOMAIN")
+      !base ||
+      base.includes("YOUR-BACKEND") ||
+      base.includes("YOUR_BACKEND")
     ) {
       return {
         ok: false,
         status: 0,
         data: {
-          message:
-            "Backend URL is not configured. Update API_BASE in auth.js."
+          error: "Backend URL is not configured in auth.js."
         }
       };
     }
@@ -247,19 +234,16 @@
     }, API_TIMEOUT);
 
     try {
-      const response = await fetch(
-        `${API_BASE.replace(/\/+$/, "")}${endpoint}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          credentials: "omit",
-          body: JSON.stringify(payload),
-          signal: controller.signal
-        }
-      );
+      const response = await fetch(`${base}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        credentials: "omit",
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
 
       const text = await response.text();
 
@@ -269,7 +253,7 @@
         data = text ? JSON.parse(text) : {};
       } catch {
         data = {
-          message: "The server returned an invalid response."
+          error: "The server returned an invalid response."
         };
       }
 
@@ -283,12 +267,12 @@
       const message =
         error.name === "AbortError"
           ? "The server took too long to respond. Please try again."
-          : "Cannot connect to the authentication server. Check your backend URL and server status.";
+          : "Cannot connect to the authentication server. Check your backend URL, CORS settings, and server status.";
 
       return {
         ok: false,
         status: 0,
-        data: { message }
+        data: { error: message }
       };
 
     } finally {
@@ -296,9 +280,9 @@
     }
   }
 
-  /* ==========================================================
-     LOGIN
-  ========================================================== */
+  // ==========================================================
+  // LOGIN
+  // ==========================================================
 
   async function handleLogin() {
     clearStatus(elements.loginStatus);
@@ -333,63 +317,70 @@
 
     setLoading(elements.loginBtn, true, "AUTHENTICATING...");
 
-    const result = await apiPost("/api/auth/login", {
-      email,
-      password
-    });
+    try {
+      const result = await apiPost("/api/auth/login", {
+        email,
+        password
+      });
 
-    setLoading(
-      elements.loginBtn,
-      false,
-      "DEPLOY TO BASE"
-    );
+      if (!isSuccessful(result)) {
+        showStatus(
+          elements.loginStatus,
+          getErrorMessage(result, "Login failed."),
+          "error"
+        );
+        return;
+      }
 
-    if (!isSuccessful(result)) {
+      const data = result.data;
+
+      if (!data.token) {
+        showStatus(
+          elements.loginStatus,
+          "The server did not return a session token. Please try again.",
+          "error"
+        );
+        return;
+      }
+
+      const commanderName =
+        data.commanderName ||
+        data.username ||
+        email.split("@")[0];
+
+      persistSession(data.token, {
+        email: data.email || email,
+        commanderName,
+        progress: data.progress || {}
+      });
+
       showStatus(
         elements.loginStatus,
-        getErrorMessage(result, "Login failed."),
+        `Welcome back, ${commanderName}! Establishing uplink...`,
+        "success"
+      );
+
+      setTimeout(() => {
+        window.location.replace(REDIRECT_URL);
+      }, 900);
+
+    } catch (error) {
+      console.error("[Auth] Login error:", error);
+
+      showStatus(
+        elements.loginStatus,
+        "An unexpected error occurred during login.",
         "error"
       );
 
-      return;
+    } finally {
+      setLoading(elements.loginBtn, false);
     }
-
-    const data = result.data;
-
-    if (!data.token) {
-      showStatus(
-        elements.loginStatus,
-        "Login response did not contain a session token.",
-        "error"
-      );
-
-      return;
-    }
-
-    const commanderName =
-      data.commanderName ||
-      data.username ||
-      email.split("@")[0];
-
-    persistSession(data.token, {
-      email: data.email || email,
-      commanderName
-    });
-
-    showStatus(
-      elements.loginStatus,
-      `Welcome back, ${commanderName}! Establishing uplink...`,
-      "success"
-    );
-
-    setTimeout(() => {
-      window.location.replace(REDIRECT_URL);
-    }, 900);
   }
 
-  /* ==========================================================
-     REGISTRATION
-  ========================================================== */
+  // ==========================================================
+  // REGISTRATION
+  // ==========================================================
 
   async function handleRegister() {
     clearStatus(elements.regStatus);
@@ -406,9 +397,9 @@
     const confirmPassword =
       elements.regConfirm?.value || "";
 
-    /* --------------------------------------------------------
-       VALIDATION
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // VALIDATION
+    // --------------------------------------------------------
 
     if (
       commanderName.length < 3 ||
@@ -424,10 +415,10 @@
       return;
     }
 
-    if (!/^[a-zA-Z0-9_\- ]+$/.test(commanderName)) {
+    if (!/^[a-zA-Z0-9_-]+(?: [a-zA-Z0-9_-]+)*$/.test(commanderName)) {
       showStatus(
         elements.regStatus,
-        "Commander name can only contain letters, numbers, spaces, underscores, and hyphens.",
+        "Commander name can contain letters, numbers, spaces, underscores, and hyphens.",
         "error"
       );
 
@@ -479,9 +470,9 @@
       return;
     }
 
-    /* --------------------------------------------------------
-       SEND REGISTRATION REQUEST
-    -------------------------------------------------------- */
+    // --------------------------------------------------------
+    // SEND REGISTRATION REQUEST
+    // --------------------------------------------------------
 
     setLoading(
       elements.regBtn,
@@ -489,75 +480,80 @@
       "CREATING ACCOUNT..."
     );
 
-    const result = await apiPost("/api/auth/register", {
-      email,
-      password,
-      commanderName
-    });
-
-    setLoading(
-      elements.regBtn,
-      false,
-      "CREATE ACCOUNT"
-    );
-
-    /* --------------------------------------------------------
-       HANDLE ERRORS
-    -------------------------------------------------------- */
-
-    if (!isSuccessful(result)) {
-      showStatus(
-        elements.regStatus,
-        getErrorMessage(result, "Registration failed."),
-        "error"
-      );
-
-      console.error("Registration failed:", {
-        status: result.status,
-        response: result.data
+    try {
+      const result = await apiPost("/api/auth/register", {
+        email,
+        password,
+        commanderName
       });
 
-      return;
-    }
+      if (!isSuccessful(result)) {
+        showStatus(
+          elements.regStatus,
+          getErrorMessage(result, "Registration failed."),
+          "error"
+        );
 
-    /* --------------------------------------------------------
-       STORE SESSION
-    -------------------------------------------------------- */
+        console.error("[Auth] Registration failed:", {
+          status: result.status,
+          response: result.data
+        });
 
-    const data = result.data;
+        return;
+      }
 
-    if (!data.token) {
+      // ------------------------------------------------------
+      // STORE SESSION ONLY AFTER CONFIRMED SUCCESS
+      // ------------------------------------------------------
+
+      const data = result.data;
+
+      if (!data.token) {
+        showStatus(
+          elements.regStatus,
+          "The account may have been created, but the server did not return a session token. Please try logging in.",
+          "error"
+        );
+
+        return;
+      }
+
+      const resolvedName =
+        data.commanderName || commanderName;
+
+      persistSession(data.token, {
+        email: data.email || email,
+        commanderName: resolvedName,
+        progress: data.progress || {}
+      });
+
       showStatus(
         elements.regStatus,
-        "Your account may have been created, but the server did not return a session token. Please try logging in.",
+        `Account created successfully, ${resolvedName}! Deploying...`,
+        "success"
+      );
+
+      setTimeout(() => {
+        window.location.replace(REDIRECT_URL);
+      }, 1000);
+
+    } catch (error) {
+      console.error("[Auth] Registration error:", error);
+
+      showStatus(
+        elements.regStatus,
+        "An unexpected error occurred during registration.",
         "error"
       );
 
-      return;
+    } finally {
+      setLoading(elements.regBtn, false);
     }
-
-    const resolvedName =
-      data.commanderName || commanderName;
-
-    persistSession(data.token, {
-      email: data.email || email,
-      commanderName: resolvedName
-    });
-
-    showStatus(
-      elements.regStatus,
-      `Account created successfully, ${resolvedName}! Deploying...`,
-      "success"
-    );
-
-    setTimeout(() => {
-      window.location.replace(REDIRECT_URL);
-    }, 1000);
   }
 
-  /* ==========================================================
-     RESPONSE VALIDATION
-  ========================================================== */
+  // ==========================================================
+  // RESPONSE VALIDATION
+  // ==========================================================
 
   function isSuccessful(result) {
     if (!result || !result.ok) {
@@ -566,21 +562,21 @@
 
     const data = result.data || {};
 
-    if (data.success === false || data.ok === false) {
-      return false;
-    }
-
-    return data.success === true || data.ok === true;
+    return data.ok === true || data.success === true;
   }
 
   function getErrorMessage(result, fallback) {
     const data = result?.data || {};
 
-    if (data.message) return data.message;
     if (data.error) return data.error;
+    if (data.message) return data.message;
 
     if (result?.status === 409) {
       return "An account with this email already exists.";
+    }
+
+    if (result?.status === 429) {
+      return "Too many attempts. Please wait before trying again.";
     }
 
     if (result?.status === 503) {
@@ -598,9 +594,9 @@
     return fallback;
   }
 
-  /* ==========================================================
-     SESSION MANAGEMENT
-  ========================================================== */
+  // ==========================================================
+  // SESSION MANAGEMENT
+  // ==========================================================
 
   function persistSession(token, user) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -649,15 +645,15 @@
       );
 
     } catch (error) {
-      console.error("Could not refresh session user:", error);
+      console.error("[Auth] Could not refresh session user:", error);
     }
 
     return true;
   }
 
-  /* ==========================================================
-     UI HELPERS
-  ========================================================== */
+  // ==========================================================
+  // UI HELPERS
+  // ==========================================================
 
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -673,7 +669,7 @@
     button.disabled = loading;
     button.classList.toggle("loading", loading);
 
-    if (label) {
+    if (loading && label) {
       button.textContent = label;
     } else if (!loading && button.dataset.originalText) {
       button.textContent = button.dataset.originalText;
@@ -684,9 +680,7 @@
     if (!element) return;
 
     element.textContent = message;
-
-    element.className =
-      `auth-status visible ${type}`;
+    element.className = `auth-status visible ${type}`;
   }
 
   function clearStatus(element) {
