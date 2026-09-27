@@ -38,20 +38,43 @@
 
 // ─── Sheet configuration ──────────────────────────────────────────────────────
 
-var SHEET_NAME = "GalacticWarfare";
-
-var COL = {
-  EMAIL:   1,   // A
-  PASSWORD:2,   // B
-  CMD_N:   3,   // C  (Command_N)
-  MODES:   4,   // D  (Modes Unlock)
-  LEVEL:   5,   // E
-  COINS:   6    // F  (Coins Collected)
+const CONFIG = {
+  SHEET_NAME: "GalacticWarfare",
+  HEADERS: [
+    "Email",
+    "Password",
+    "Commander_N",
+    "Modes Unlock",
+    "Level",
+    "Coins Collected"
+  ]
 };
 
-var HEADERS = ["Email", "Password", "Command_N", "Modes Unlock", "Level", "Coins Collected"];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+/* =========================================================
+   INITIALIZE SPREADSHEET
+========================================================= */
+
+function getSheet() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  let sheet = spreadsheet.getSheetByName(CONFIG.SHEET_NAME);
+
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(CONFIG.SHEET_NAME);
+  }
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(CONFIG.HEADERS);
+  }
+
+  return sheet;
+}
+
+
+/* =========================================================
+   JSON RESPONSE
+========================================================= */
 
 function jsonResponse(data) {
   return ContentService
@@ -59,120 +82,149 @@ function jsonResponse(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-/** Returns the GalacticWarfare sheet, creating it with headers if absent. */
-function getSheet() {
-  var ss    = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(SHEET_NAME);
 
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-  }
+/* =========================================================
+   PASSWORD HASHING
+========================================================= */
 
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(HEADERS);
-    sheet.getRange(1, 1, 1, HEADERS.length).setFontWeight("bold");
-  }
-
-  return sheet;
-}
-
-/** SHA-256 + base64 with a UUID salt. Returns "<salt>:<hash>". */
 function hashPassword(password, salt) {
-  var digest = Utilities.computeDigest(
+  const value = salt + password;
+
+  const digest = Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256,
-    salt + password,
+    value,
     Utilities.Charset.UTF_8
   );
-  return salt + ":" + Utilities.base64Encode(digest);
+
+  return Utilities.base64Encode(digest);
 }
 
-/** Returns { row, email } for an existing email, or null. */
+
+/* =========================================================
+   FIND PLAYER
+========================================================= */
+
 function findPlayer(email) {
-  var sheet   = getSheet();
-  var lastRow = sheet.getLastRow();
+  const sheet = getSheet();
+  const lastRow = sheet.getLastRow();
 
-  if (lastRow < 2) return null;
+  if (lastRow < 2) {
+    return null;
+  }
 
-  var emails = sheet.getRange(2, COL.EMAIL, lastRow - 1, 1).getDisplayValues();
-  var target = email.trim().toLowerCase();
+  const emails = sheet
+    .getRange(2, 1, lastRow - 1, 1)
+    .getDisplayValues();
 
-  for (var i = 0; i < emails.length; i++) {
-    if (emails[i][0].trim().toLowerCase() === target) {
-      return { row: i + 2, email: emails[i][0] };
+  const normalizedEmail = email.trim().toLowerCase();
+
+  for (let i = 0; i < emails.length; i++) {
+    if (
+      emails[i][0].trim().toLowerCase() === normalizedEmail
+    ) {
+      return {
+        row: i + 2,
+        email: emails[i][0]
+      };
     }
   }
+
   return null;
 }
 
-/** Reads columns C-F for a given row and returns a progress object. */
+
+/* =========================================================
+   GET PLAYER PROGRESS
+========================================================= */
+
 function getPlayerProgress(row) {
-  var sheet = getSheet();
-  var data  = sheet.getRange(row, COL.CMD_N, 1, 4).getValues()[0];
+  const sheet = getSheet();
+
+  const data = sheet
+    .getRange(row, 3, 1, 4)
+    .getValues()[0];
+
   return {
-    commanderName:  String(data[0] || "Commander"),
-    modesUnlock:    String(data[1] || "Adventure"),
-    level:          Number(data[2]) || 1,
+    commanderName: data[0] || "Commander",
+    modesUnlock: data[1] || "Adventure",
+    level: Number(data[2]) || 1,
     coinsCollected: Number(data[3]) || 0
   };
 }
 
-// ─── register ─────────────────────────────────────────────────────────────────
+
+/* =========================================================
+   REGISTER
+========================================================= */
 
 function registerPlayer(data) {
-  // Accept either "commanderName" or "username" as the display-name field
-  var email         = String(data.email         || "").trim().toLowerCase();
-  var password      = String(data.password      || "");
-  var commanderName = String(data.commanderName || data.username || "").trim();
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
+  const commanderName = String(data.commanderName || "").trim();
 
-  // ── Validation ──
   if (!email || !password || !commanderName) {
-    return { success: false, message: "Please complete all required fields." };
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { success: false, message: "Please enter a valid email address." };
-  }
-  if (password.length < 8) {
-    return { success: false, message: "Password must be at least 8 characters." };
-  }
-  if (commanderName.length < 3 || commanderName.length > 24) {
-    return { success: false, message: "Commander name must be 3–24 characters." };
+    return {
+      success: false,
+      message: "Please complete all required fields."
+    };
   }
 
-  // ── Duplicate check + write under script lock ──
-  var lock = LockService.getScriptLock();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return {
+      success: false,
+      message: "Please enter a valid email address."
+    };
+  }
+
+  if (password.length < 12) {
+    return {
+      success: false,
+      message: "Password must contain at least 12 characters."
+    };
+  }
+
+  if (commanderName.length > 5) {
+    return {
+      success: false,
+      message: "Commander name must be 5 characters or Higher."
+    };
+  }
+
+  const lock = LockService.getScriptLock();
   lock.waitLock(10000);
 
   try {
     if (findPlayer(email)) {
       return {
-        success:   false,
-        duplicate: true,
-        message:   "An account with this email already exists."
+        success: false,
+        message: "An account with this email already exists."
       };
     }
 
-    var salt     = Utilities.getUuid();
-    var stored   = hashPassword(password, salt);
-    var sheet    = getSheet();
+    const sheet = getSheet();
+
+    const salt = Utilities.getUuid();
+    const passwordHash = hashPassword(password, salt);
+
+    // Store the salt and hash together in the Password column.
+    const storedPassword = salt + ":" + passwordHash;
 
     sheet.appendRow([
       email,
-      stored,
+      storedPassword,
       commanderName,
       "Adventure",
       1,
       0
     ]);
 
-    Logger.log("Registered: " + email + " (" + commanderName + ")");
-
     return {
-      success:  true,
-      message:  "Account registered successfully.",
+      success: true,
+      message: "Account registered successfully.",
       progress: {
-        commanderName:  commanderName,
-        modesUnlock:    "Adventure",
-        level:          1,
+        commanderName: commanderName,
+        modesUnlock: "Adventure",
+        level: 1,
         coinsCollected: 0
       }
     };
@@ -182,151 +234,240 @@ function registerPlayer(data) {
   }
 }
 
-// ─── login ────────────────────────────────────────────────────────────────────
+
+/* =========================================================
+   LOGIN
+========================================================= */
 
 function loginPlayer(data) {
-  var email    = String(data.email    || "").trim().toLowerCase();
-  var password = String(data.password || "");
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
 
   if (!email || !password) {
-    return { success: false, message: "Email and password are required." };
+    return {
+      success: false,
+      message: "Email and password are required."
+    };
   }
 
-  var player = findPlayer(email);
+  const player = findPlayer(email);
+
   if (!player) {
-    return { success: false, message: "Invalid email or password." };
+    return {
+      success: false,
+      message: "Invalid email or password."
+    };
   }
 
-  var sheet          = getSheet();
-  var storedPassword = String(sheet.getRange(player.row, COL.PASSWORD).getValue());
-  var colonIdx       = storedPassword.indexOf(":");
+  const sheet = getSheet();
 
-  if (colonIdx < 0) {
-    return { success: false, message: "Account data is corrupted." };
-  }
-
-  var salt      = storedPassword.slice(0, colonIdx);
-  var savedHash = storedPassword.slice(colonIdx + 1);
-  var inputHash = Utilities.base64Encode(
-    Utilities.computeDigest(
-      Utilities.DigestAlgorithm.SHA_256,
-      salt + password,
-      Utilities.Charset.UTF_8
-    )
+  const storedPassword = String(
+    sheet.getRange(player.row, 2).getValue()
   );
+
+  const parts = storedPassword.split(":");
+
+  if (parts.length !== 2) {
+    return {
+      success: false,
+      message: "Account password data is invalid."
+    };
+  }
+
+  const salt = parts[0];
+  const savedHash = parts[1];
+
+  const inputHash = hashPassword(password, salt);
 
   if (inputHash !== savedHash) {
-    return { success: false, message: "Invalid email or password." };
+    return {
+      success: false,
+      message: "Invalid email or password."
+    };
   }
 
-  // Update last-login timestamp in a comment cell (no dedicated column)
-  // — we record it in the Logger only, preserving the 6-column layout.
-  Logger.log("Login: " + email);
-
   return {
-    success:  true,
-    message:  "Login successful.",
-    email:    player.email,
+    success: true,
+    message: "Login successful.",
+    email: player.email,
     progress: getPlayerProgress(player.row)
   };
 }
 
-// ─── saveProgress ─────────────────────────────────────────────────────────────
+
+/* =========================================================
+   SAVE PLAYER PROGRESS
+========================================================= */
 
 function saveProgress(data) {
-  var email    = String(data.email    || "").trim().toLowerCase();
-  var password = String(data.password || "");
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
 
-  var player = findPlayer(email);
+  const player = findPlayer(email);
+
   if (!player) {
-    return { success: false, message: "Player account not found." };
+    return {
+      success: false,
+      message: "Player account not found."
+    };
   }
 
-  // Authenticate before writing
-  var sheet   = getSheet();
-  var stored  = String(sheet.getRange(player.row, COL.PASSWORD).getValue());
-  var colIdx  = stored.indexOf(":");
-  if (colIdx < 0) return { success: false, message: "Account data is corrupted." };
+  const sheet = getSheet();
 
-  var inputHash = Utilities.base64Encode(
-    Utilities.computeDigest(
-      Utilities.DigestAlgorithm.SHA_256,
-      stored.slice(0, colIdx) + password,
-      Utilities.Charset.UTF_8
-    )
+  const storedPassword = String(
+    sheet.getRange(player.row, 2).getValue()
   );
-  if (inputHash !== stored.slice(colIdx + 1)) {
-    return { success: false, message: "Authentication failed." };
+
+  const parts = storedPassword.split(":");
+
+  if (parts.length !== 2) {
+    return {
+      success: false,
+      message: "Account password data is invalid."
+    };
   }
 
-  var level  = parseInt(data.level,          10);
-  var coins  = parseInt(data.coinsCollected, 10);
-  var name   = String(data.commanderName || "").trim().slice(0, 24);
-  var modes  = String(data.modesUnlock   || "Adventure").trim().slice(0, 200);
-
-  if (!Number.isInteger(level) || level < 1 || !Number.isInteger(coins) || coins < 0) {
-    return { success: false, message: "Invalid progress data." };
+  if (hashPassword(password, parts[0]) !== parts[1]) {
+    return {
+      success: false,
+      message: "Authentication failed."
+    };
   }
 
-  sheet.getRange(player.row, COL.CMD_N, 1, 4).setValues([[name, modes, level, coins]]);
+  const level = Number(data.level);
+  const coins = Number(data.coinsCollected);
 
-  return { success: true, message: "Progress saved." };
+  if (
+    !Number.isInteger(level) ||
+    level < 1 ||
+    !Number.isInteger(coins) ||
+    coins < 0
+  ) {
+    return {
+      success: false,
+      message: "Invalid progress data."
+    };
+  }
+
+  const commanderName = String(
+    data.commanderName || ""
+  ).trim();
+
+  const modesUnlock = String(
+    data.modesUnlock || "Adventure"
+  ).trim();
+
+  if (commanderName.length > 40 || modesUnlock.length > 200) {
+    return {
+      success: false,
+      message: "Invalid commander name or mode data."
+    };
+  }
+
+  sheet.getRange(player.row, 3, 1, 4).setValues([[
+    commanderName,
+    modesUnlock,
+    level,
+    coins
+  ]]);
+
+  return {
+    success: true,
+    message: "Progress saved successfully."
+  };
 }
 
-// ─── loadProgress ─────────────────────────────────────────────────────────────
+
+/* =========================================================
+   LOAD PLAYER PROGRESS
+========================================================= */
 
 function loadProgress(data) {
-  var email    = String(data.email    || "").trim().toLowerCase();
-  var password = String(data.password || "");
+  const email = String(data.email || "").trim().toLowerCase();
+  const password = String(data.password || "");
 
-  var player = findPlayer(email);
+  const player = findPlayer(email);
+
   if (!player) {
-    return { success: false, message: "Player account not found." };
+    return {
+      success: false,
+      message: "Player account not found."
+    };
   }
 
-  var sheet  = getSheet();
-  var stored = String(sheet.getRange(player.row, COL.PASSWORD).getValue());
-  var colIdx = stored.indexOf(":");
-  if (colIdx < 0) return { success: false, message: "Account data is corrupted." };
+  const sheet = getSheet();
 
-  var inputHash = Utilities.base64Encode(
-    Utilities.computeDigest(
-      Utilities.DigestAlgorithm.SHA_256,
-      stored.slice(0, colIdx) + password,
-      Utilities.Charset.UTF_8
-    )
+  const storedPassword = String(
+    sheet.getRange(player.row, 2).getValue()
   );
-  if (inputHash !== stored.slice(colIdx + 1)) {
-    return { success: false, message: "Authentication failed." };
+
+  const parts = storedPassword.split(":");
+
+  if (
+    parts.length !== 2 ||
+    hashPassword(password, parts[0]) !== parts[1]
+  ) {
+    return {
+      success: false,
+      message: "Authentication failed."
+    };
   }
 
   return {
-    success:  true,
-    message:  "Progress loaded.",
+    success: true,
+    message: "Progress loaded successfully.",
     progress: getPlayerProgress(player.row)
   };
 }
 
-// ─── HTTP entry points ────────────────────────────────────────────────────────
+
+/* =========================================================
+   API ROUTER
+========================================================= */
 
 function doGet() {
-  return jsonResponse({ success: true, message: "Chrono-Front API is running." });
+  return jsonResponse({
+    success: true,
+    message: "Chrono-Front API is running."
+  });
 }
+
 
 function doPost(e) {
   try {
-    var data   = JSON.parse(e.postData.contents);
-    var action = String(data.action || "").toLowerCase();
+    const data = JSON.parse(
+      e.postData.contents
+    );
 
-    switch (action) {
-      case "register":     return jsonResponse(registerPlayer(data));
-      case "login":        return jsonResponse(loginPlayer(data));
-      case "saveprogress": return jsonResponse(saveProgress(data));
-      case "loadprogress": return jsonResponse(loadProgress(data));
+    switch (data.action) {
+
+      case "register":
+        return jsonResponse(registerPlayer(data));
+
+      case "login":
+        return jsonResponse(loginPlayer(data));
+
+      case "saveProgress":
+        return jsonResponse(saveProgress(data));
+
+      case "loadProgress":
+        return jsonResponse(loadProgress(data));
+
       default:
-        return jsonResponse({ success: false, message: "Unknown action: " + action });
+        return jsonResponse({
+          success: false,
+          message: "Unknown action."
+        });
     }
-  } catch (err) {
+
+  } catch (error) {
+    return jsonResponse({
+      success: false,
+      message: "Request failed.",
+      error: String(error.message)
+    });
+  }
+}
     Logger.log("doPost error: " + err.message);
     return jsonResponse({ success: false, message: "Request failed: " + err.message });
   }
