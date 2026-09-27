@@ -1,0 +1,524 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a3a0a" />
+  <meta name="description" content="Chrono-Front: Galactic War — Defend Earth against alien invasion." />
+  <title>Chrono-Front: Galactic War</title>
+
+  <!-- ── Auth Guard ──────────────────────────────────────────
+       Must run BEFORE any other scripts or content renders.
+       1. No token → redirect to auth.html immediately (sync).
+       2. Token present → allow page, then verify in background;
+          invalidate silently so next load redirects correctly.
+  ──────────────────────────────────────────────────────────── -->
+  <script>
+  (function () {
+    // Support both old token key (gw_id_token) and new (gw_session_token)
+    var TOKEN_KEY  = 'gw_session_token';
+    var TOKEN_KEY2 = 'gw_id_token';
+    var AUTH_PAGE  = 'auth.html';
+    var token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY2);
+    if (!token) {
+      window.location.replace(AUTH_PAGE);
+      throw new Error('[Auth Guard] No session — redirecting to ' + AUTH_PAGE);
+    }
+    // Detect Express server port — API calls must go to port 3000 regardless
+    // of whether this page is served by Live Server or another dev server.
+    var EXPRESS_PORT = '3000';
+    var apiBase = (window.location.port === EXPRESS_PORT || window.location.protocol === 'https:')
+      ? '' : 'http://localhost:' + EXPRESS_PORT;
+    // Background verify — non-blocking
+    setTimeout(function () {
+      fetch(apiBase + '/api/auth/verify', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ token: token }),
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(TOKEN_KEY2);
+          localStorage.removeItem('gw_user');
+        } else if (d.username) {
+          try {
+            var u = JSON.parse(localStorage.getItem('gw_user') || '{}');
+            u.username = d.username;
+            localStorage.setItem('gw_user', JSON.stringify(u));
+          } catch (_) {}
+        }
+      })
+      .catch(function () {});
+    }, 800);
+  })();
+  </script>
+
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/menu.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body class="menu-page">
+
+  <!-- ═══════════════════════════════════════════════════════
+       INTRO LOADING SCREEN — shown on first page load
+       Animates in, then fades out before menu appears
+       ═══════════════════════════════════════════════════════ -->
+  <div id="intro-screen" role="status" aria-live="polite" aria-label="Loading Chrono-Front: Galactic War">
+
+    <!-- Animated background particles -->
+    <div class="intro-bg-orb intro-bg-orb--green"  aria-hidden="true"></div>
+    <div class="intro-bg-orb intro-bg-orb--purple" aria-hidden="true"></div>
+    <div class="intro-bg-orb intro-bg-orb--red"    aria-hidden="true"></div>
+    <div class="intro-scanlines"                   aria-hidden="true"></div>
+
+    <!-- Battle scene decoration (CSS drawn) -->
+    <div class="intro-scene" aria-hidden="true">
+      <div class="intro-base-structure"></div>
+      <div class="intro-alien-silhouette intro-alien-silhouette--1"></div>
+      <div class="intro-alien-silhouette intro-alien-silhouette--2"></div>
+      <div class="intro-alien-silhouette intro-alien-silhouette--3"></div>
+      <div class="intro-ground-line"></div>
+    </div>
+
+    <!-- Content -->
+    <div class="intro-content">
+      <div class="intro-badge">INITIALIZING DEFENSE SYSTEMS</div>
+      <h1 class="intro-title">
+        <span class="intro-title-top">CHRONO-FRONT</span>
+        <span class="intro-title-divider">✦</span>
+        <span class="intro-title-bottom">GALACTIC WAR</span>
+      </h1>
+      <p class="intro-subtitle">Cross Time. Repel the Invasion.</p>
+
+      <div class="intro-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="introProgress">
+        <div class="intro-bar-fill" id="introBarFill"></div>
+        <div class="intro-bar-glow"></div>
+      </div>
+      <p class="intro-status" id="introStatus">Establishing uplink…</p>
+
+      <!-- Tactical threat display -->
+      <div class="intro-threat-row" aria-hidden="true">
+        <span class="intro-threat-dot"></span>
+        <span class="intro-threat-text">ALIEN SIGNAL DETECTED</span>
+        <span class="intro-threat-dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Animated environmental background -->
+  <div class="bg-particles" id="bgParticles" aria-hidden="true"></div>
+  <div class="bg-scanlines" aria-hidden="true"></div>
+
+  <!-- Two-column layout -->
+  <div class="page-layout">
+
+    <!-- Main Menu Column -->
+    <div class="menu-wrapper" id="menuWrapper">
+
+      <header class="menu-header" role="banner">
+        <div class="title-glow-ring" aria-hidden="true"></div>
+        <h1 class="game-title">
+          <span class="title-top">CHRONO-FRONT</span>
+          <span class="title-divider" aria-hidden="true">
+            <span class="divider-line"></span>
+            <span class="divider-icon">✦</span>
+            <span class="divider-line"></span>
+          </span>
+          <span class="title-bottom">GALACTIC WAR</span>
+        </h1>
+        <p class="game-subtitle">Cross Time. Repel the Invasion. Win the Galactic War.</p>
+        <div class="signal-row" aria-hidden="true">
+          <span class="signal-dot signal-dot--active"></span>
+          <span class="signal-text">ALIEN SIGNAL DETECTED</span>
+          <span class="signal-dot signal-dot--active"></span>
+        </div>
+        <!-- Player greeting (populated by menu.js) -->
+        <div class="player-greeting" id="playerGreeting" aria-live="polite"></div>
+      </header>
+
+      <nav class="menu-nav" role="navigation" aria-label="Main Menu">
+
+        <!-- 1. ADVENTURE — always unlocked -->
+        <button class="menu-btn menu-btn--primary" id="btnAdventure" aria-label="Adventure Mode">
+          <span class="btn-icon">🌿</span>
+          <span class="btn-label">ADVENTURE</span>
+          <span class="btn-shine" aria-hidden="true"></span>
+        </button>
+
+        <!-- 2. SURVIVAL / ENDLESS -->
+        <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnSurvival" aria-label="Survival and Endless Mode">
+          <span class="btn-icon">🛡</span>
+          <span class="btn-label">SURVIVAL / ENDLESS</span>
+          <span class="btn-lock-icon" id="lockSurvival" aria-hidden="true">🔒</span>
+        </button>
+
+        <!-- Row: MINI-GAMES + PUZZLE -->
+        <div class="menu-btn-row">
+          <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnMiniGames" aria-label="Mini-Games">
+            <span class="btn-icon">🎮</span>
+            <span class="btn-label">MINI-GAMES</span>
+            <span class="btn-lock-icon" id="lockMiniGames" aria-hidden="true">🔒</span>
+          </button>
+          <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnPuzzle" aria-label="Puzzle Mode">
+            <span class="btn-icon">🧩</span>
+            <span class="btn-label">PUZZLE</span>
+            <span class="btn-lock-icon" id="lockPuzzle" aria-hidden="true">🔒</span>
+          </button>
+        </div>
+
+        <!-- CHARACTERS PROFILE -->
+        <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnProfiles" aria-label="Characters Profile">
+          <span class="btn-icon">🪖</span>
+          <span class="btn-label">CHARACTERS PROFILE</span>
+          <span class="btn-lock-icon" id="lockProfiles" aria-hidden="true">🔒</span>
+        </button>
+
+        <!-- Row: EXTRAS + SETTINGS -->
+        <div class="menu-btn-row">
+          <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnExtras" aria-label="Extras">
+            <span class="btn-icon">📡</span>
+            <span class="btn-label">EXTRAS</span>
+            <span class="btn-lock-icon" id="lockExtras" aria-hidden="true">🔒</span>
+          </button>
+          <button class="menu-btn menu-btn--secondary" id="btnSettings" aria-label="Settings">
+            <span class="btn-icon">⚙</span>
+            <span class="btn-label">SETTINGS</span>
+          </button>
+        </div>
+
+        <!-- Row: CREDITS + QUIT -->
+        <div class="menu-btn-row">
+          <button class="menu-btn menu-btn--tertiary" id="btnCredits" aria-label="Credits">
+            <span class="btn-label">CREDITS</span>
+          </button>
+          <button class="menu-btn menu-btn--tertiary menu-btn--quit" id="btnQuit" aria-label="Quit">
+            <span class="btn-label">QUIT</span>
+          </button>
+        </div>
+
+      </nav>
+
+      <footer class="menu-footer" role="contentinfo">
+        <span class="version-tag">v1.0.0 · Chrono-Front: Galactic War · All content original</span>
+      </footer>
+
+    </div><!-- /.menu-wrapper -->
+
+    <!-- Coming Soon Card -->
+    <aside class="coming-soon-card" aria-label="Upcoming game announcement">
+      <div class="cs-badge">COMING SOON</div>
+      <div class="cs-logo-area" aria-hidden="true">
+        <div class="cs-logo-ring"></div>
+        <div class="cs-logo-icon">🌌</div>
+      </div>
+      <h2 class="cs-title">CHRONO-FRONT</h2>
+      <p class="cs-subtitle">ECHOES OF WAR</p>
+      <p class="cs-description">
+        A new strategic experience in the Chrono-Front universe.<br/>
+        <span class="cs-hint">Temporal tactical combat. Master time. Conquer the galaxy.</span>
+      </p>
+      <div class="cs-tags">
+        <span class="cs-tag">Strategy</span>
+        <span class="cs-tag">Card Game</span>
+        <span class="cs-tag">NEW</span>
+      </div>
+      <button class="cs-notify-btn" id="btnNotify" aria-label="Notify me about Heroes of Earth">NOTIFY ME</button>
+    </aside>
+
+  </div><!-- /.page-layout -->
+
+  <!-- ══════════════════════════════════════════════════════
+       OVERLAYS
+       ══════════════════════════════════════════════════════ -->
+
+  <!-- First-visit player name setup -->
+  <div class="overlay" id="newPlayerOverlay" role="dialog" aria-modal="true" aria-labelledby="npTitle" hidden>
+    <div class="overlay-box overlay-box--new-player">
+      <div class="np-logo">🌿</div>
+      <h2 class="overlay-title" id="npTitle">WELCOME, COMMANDER</h2>
+      <p class="overlay-body">Earth's garden defenses need a leader.<br/>Enter your name to begin.</p>
+      <div class="np-input-row">
+        <input type="text" id="playerNameInput" class="np-input"
+          placeholder="Commander Name"
+          maxlength="24"
+          aria-label="Enter your commander name"
+          autocomplete="off"
+          spellcheck="false" />
+      </div>
+      <div class="np-error" id="npError" aria-live="polite"></div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnStartGame" aria-label="Begin your adventure">
+        <span class="btn-label">BEGIN ADVENTURE ▶</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Adventure / Levels overlay -->
+  <div class="overlay" id="adventureOverlay" role="dialog" aria-modal="true" aria-labelledby="advTitle" hidden>
+    <div class="overlay-box overlay-box--fullscreen">
+      <h2 class="overlay-title" id="advTitle">🌿 ADVENTURE MODE</h2>
+      <p class="overlay-subtitle">Earth's garden defense campaign — 50 levels across 5 environments</p>
+      <div class="levels-phase-tabs" id="levelsPhaseTabs" role="tablist">
+        <button class="phase-tab phase-tab--active" data-phase="daytime"      role="tab">☀ Daytime (1-10)</button>
+        <button class="phase-tab"                   data-phase="nighttime"    role="tab">🌙 Nighttime (11-20)</button>
+        <button class="phase-tab"                   data-phase="foggy"        role="tab">🌫 Foggy (21-30)</button>
+        <button class="phase-tab"                   data-phase="rainy_stormy" role="tab">⛈ Storm (31-40)</button>
+        <button class="phase-tab"                   data-phase="radioactive"  role="tab">☢ Radioactive (41-50)</button>
+      </div>
+      <div class="levels-grid" id="levelsGrid"></div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnAdvClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Characters Profile overlay -->
+  <div class="overlay" id="profilesOverlay" role="dialog" aria-modal="true" aria-labelledby="profTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="profTitle">🪖 CHARACTERS PROFILE</h2>
+      <div class="chars-tabs" role="tablist">
+        <button class="char-tab char-tab--active" id="tabMilitary" role="tab">⚔ MILITARY</button>
+        <button class="char-tab" id="tabAliens" role="tab">👾 ALIENS</button>
+      </div>
+      <div id="profilePanelMilitary" class="chars-panel chars-panel--active">
+        <div class="chars-grid" id="militaryGrid"></div>
+      </div>
+      <div id="profilePanelAliens" class="chars-panel" hidden>
+        <div class="chars-grid" id="aliensGrid"></div>
+      </div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnProfilesClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Locked mode overlay -->
+  <div class="overlay" id="lockedOverlay" role="dialog" aria-modal="true" aria-labelledby="lockedTitle" hidden>
+    <div class="overlay-box">
+      <div class="locked-icon">🔒</div>
+      <h2 class="overlay-title" id="lockedTitle">LOCKED</h2>
+      <p class="overlay-body" id="lockedMsg">Complete more Adventure levels to unlock this mode.</p>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnLockedClose" aria-label="Close">
+        <span class="btn-label">UNDERSTOOD</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Survival / Endless -->
+  <div class="overlay" id="survivalOverlay" role="dialog" aria-modal="true" aria-labelledby="svTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="svTitle">🛡 SURVIVAL / ENDLESS</h2>
+      <div class="survival-modes-row">
+        <div class="survival-section">
+          <h3 class="survival-section-title">SURVIVAL SCENARIOS</h3>
+          <div class="mode-grid" id="survivalGrid"></div>
+        </div>
+        <div class="survival-section">
+          <h3 class="survival-section-title">ENDLESS SURVIVAL</h3>
+          <button class="endless-card" id="btnEndless" aria-label="Endless Survival">
+            <div class="endless-icon">∞</div>
+            <div class="endless-name">ENDLESS SURVIVAL</div>
+            <div class="endless-desc">Waves never stop. Survive as long as possible.</div>
+            <div class="endless-score" id="endlessScore">Best: Wave 0</div>
+          </button>
+        </div>
+      </div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnSurvivalClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mini-Games -->
+  <div class="overlay" id="miniGamesOverlay" role="dialog" aria-modal="true" aria-labelledby="mgTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="mgTitle">🎮 MINI-GAMES</h2>
+      <p class="overlay-subtitle">20 unique challenge modes</p>
+      <div class="mode-grid" id="miniGamesGrid"></div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnMGClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Puzzle -->
+  <div class="overlay" id="puzzleOverlay" role="dialog" aria-modal="true" aria-labelledby="pzTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="pzTitle">🧩 PUZZLE MODE</h2>
+      <p class="overlay-subtitle">18 strategic puzzle stages</p>
+      <div class="mode-grid" id="puzzleGrid"></div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnPuzzleClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Extras -->
+  <div class="overlay" id="extrasOverlay" role="dialog" aria-modal="true" aria-labelledby="exTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="exTitle">📡 EXTRAS</h2>
+      <div class="extras-grid">
+        <div class="extras-card extras-card--locked"><span class="extras-icon">📖</span><span class="extras-name">Alien Codex</span><span class="extras-lock">🔒</span></div>
+        <div class="extras-card extras-card--locked"><span class="extras-icon">🌍</span><span class="extras-name">Story Files</span><span class="extras-lock">🔒</span></div>
+        <div class="extras-card extras-card--locked"><span class="extras-icon">📊</span><span class="extras-name">Statistics</span><span class="extras-lock">🔒</span></div>
+        <div class="extras-card extras-card--locked"><span class="extras-icon">🏆</span><span class="extras-name">Achievements</span><span class="extras-lock">🔒</span></div>
+        <div class="extras-card extras-card--locked"><span class="extras-icon">🎖</span><span class="extras-name">Creator Bitos</span><span class="extras-lock">🔒</span></div>
+        <div class="extras-card extras-card--locked"><span class="extras-icon">🔬</span><span class="extras-name">Enemy Intel</span><span class="extras-lock">🔒</span></div>
+      </div>
+      <p class="overlay-body" style="margin-top:12px">Unlocks as you progress through Adventure Mode.</p>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnExtrasClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="overlay" id="settingsOverlay" role="dialog" aria-modal="true" aria-labelledby="stTitle" hidden>
+    <div class="overlay-box">
+      <h2 class="overlay-title" id="stTitle">⚙ SETTINGS</h2>
+      <div class="settings-list">
+        <div class="setting-row">
+          <label class="setting-label" for="sfxVol">Sound Effects</label>
+          <input class="setting-slider" type="range" id="sfxVol" min="0" max="100" value="80" aria-label="SFX volume" />
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="musicVol">Music</label>
+          <input class="setting-slider" type="range" id="musicVol" min="0" max="100" value="60" aria-label="Music volume" />
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="showTips">Show Tips</label>
+          <input class="setting-checkbox" type="checkbox" id="showTips" checked aria-label="Show gameplay tips" />
+        </div>
+        <div class="setting-row">
+          <label class="setting-label" for="pixelArt">Pixel Art Mode</label>
+          <input class="setting-checkbox" type="checkbox" id="pixelArt" checked aria-label="Pixel art rendering mode" />
+        </div>
+      </div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnSettingsClose" aria-label="Save and close settings">
+        <span class="btn-label">SAVE &amp; CLOSE</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Credits -->
+  <div class="overlay" id="creditsOverlay" role="dialog" aria-modal="true" aria-labelledby="creditsTitle" hidden>
+    <div class="overlay-box overlay-box--wide">
+      <h2 class="overlay-title" id="creditsTitle">Credits</h2>
+      <div class="credits-body">
+        <p><strong>Game Design &amp; Development</strong><br/>Chrono-Front: Galactic War Team</p>
+        <p><strong>Engine</strong><br/>Phaser 3 (MIT License)</p>
+        <p><strong>Server</strong><br/>Express.js / Node.js</p>
+        <p><strong>Database</strong><br/>Firebase Realtime Database</p>
+        <p><strong>All game content is 100% original.</strong><br/>No copyrighted assets from any commercial game were used.</p>
+        <p class="credits-note">Part 1 of 8 · v1.0.0</p>
+      </div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnCreditsClose" aria-label="Close credits">
+        <span class="btn-label">CLOSE</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Quit confirm -->
+  <div class="overlay" id="quitOverlay" role="dialog" aria-modal="true" aria-labelledby="quitTitle" hidden>
+    <div class="overlay-box">
+      <h2 class="overlay-title" id="quitTitle">QUIT?</h2>
+      <p class="overlay-body">Progress is saved automatically. Are you sure you want to quit?</p>
+      <div class="menu-btn-row" style="margin-top:8px">
+        <button class="menu-btn menu-btn--primary" id="btnQuitConfirm" aria-label="Confirm quit">
+          <span class="btn-label">YES, QUIT</span>
+        </button>
+        <button class="menu-btn menu-btn--secondary" id="btnQuitCancel" aria-label="Cancel">
+          <span class="btn-label">NO, STAY</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notify overlay -->
+  <div class="overlay" id="notifyOverlay" role="dialog" aria-modal="true" aria-labelledby="notifyTitle" hidden>
+    <div class="overlay-box">
+      <h2 class="overlay-title" id="notifyTitle">Stay Tuned</h2>
+      <p class="overlay-body"><strong>Chrono-Front: Heroes of Earth</strong> is in development.<br/>Follow our updates for launch news.</p>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnNotifyClose" aria-label="Close">
+        <span class="btn-label">GOT IT</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Coming Soon generic -->
+  <div class="overlay" id="comingSoonOverlay" role="dialog" aria-modal="true" aria-labelledby="csGTitle" hidden>
+    <div class="overlay-box">
+      <h2 class="overlay-title" id="csGTitle">Coming Soon</h2>
+      <p class="overlay-body">This content is under development and will be available in a future update.</p>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnCSClose" aria-label="Close">
+        <span class="btn-label">BACK</span>
+      </button>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/game/progression.js"></script>
+  <script src="js/game/cards.js"></script>
+  <script src="js/menu.js"></script>
+  <script>
+  // ── Intro Loading Screen Controller ──────────────────────────────────────
+  // Runs after scripts load. Animates the intro screen then calls _initMenu().
+  (function () {
+    var barFill = document.getElementById("introBarFill");
+    var status  = document.getElementById("introStatus");
+    var screen  = document.getElementById("intro-screen");
+    if (!screen) return;
+
+    var stages = [
+      { pct: 8,   msg: "Establishing uplink\u2026",         d: 350 },
+      { pct: 22,  msg: "Loading tactical assets\u2026",     d: 450 },
+      { pct: 38,  msg: "Scanning alien signatures\u2026",   d: 500 },
+      { pct: 55,  msg: "Briefing command officers\u2026",   d: 480 },
+      { pct: 72,  msg: "Deploying defense grid\u2026",      d: 500 },
+      { pct: 88,  msg: "Checking progression data\u2026",   d: 420 },
+      { pct: 100, msg: "Systems ready. Stand by\u2026",     d: 520 },
+    ];
+
+    var i = 0;
+    var tick = function () {
+      if (i >= stages.length) {
+        screen.classList.add("fade-out");
+        setTimeout(function () {
+          screen.classList.add("gone");
+          if (typeof window._initMenu === "function") window._initMenu();
+        }, 700);
+        return;
+      }
+      var st = stages[i++];
+      if (barFill) barFill.style.width = st.pct + "%";
+      if (status)  status.textContent  = st.msg;
+      setTimeout(tick, st.d);
+    };
+    setTimeout(tick, 300);
+  })();
+  </script>
+
+  <!-- ── Auth utilities available to menu.js ───────────────────────────────
+       window.gwGetUser()   → { uid, email, username } or null
+       window.gwLogout()    → clears session, redirects to auth.html
+  ──────────────────────────────────────────────────────────────────────── -->
+  <script>
+  window.gwGetUser = function () {
+    try { return JSON.parse(localStorage.getItem('gw_user') || 'null'); } catch (_) { return null; }
+  };
+  window.gwLogout = function () {
+    // Clear all session keys — must match the keys set in public/js/auth.js persistSession()
+    localStorage.removeItem('gw_session_token');
+    localStorage.removeItem('gw_id_token');
+    localStorage.removeItem('gw_user');
+    var apiBase = (window.location.port === '3000' || window.location.protocol === 'https:')
+      ? '' : 'http://localhost:3000';
+    fetch(apiBase + '/api/auth/logout', { method: 'POST' }).catch(function () {});
+    window.location.replace('auth.html');
+  };
+  </script>
+</body>
+</html>

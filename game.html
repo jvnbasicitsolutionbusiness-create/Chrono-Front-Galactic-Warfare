@@ -1,0 +1,102 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#1a3a0a" />
+  <title>Chrono-Front: Galactic War</title>
+
+  <!-- ── Auth Guard ──────────────────────────────────────────
+       Same logic as index.html — must run before game scripts.
+  ──────────────────────────────────────────────────────────── -->
+  <script>
+  (function () {
+    // Support both old token key (gw_id_token) and new (gw_session_token)
+    var TOKEN_KEY  = 'gw_session_token';
+    var TOKEN_KEY2 = 'gw_id_token';
+    var AUTH_PAGE  = 'auth.html';
+    var token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY2);
+    if (!token) {
+      window.location.replace(AUTH_PAGE);
+      throw new Error('[Auth Guard] No session — redirecting to ' + AUTH_PAGE);
+    }
+    // Background verify (non-blocking — game loading must not stall)
+    setTimeout(function () {
+      var apiBase = (window.location.port === '3000' || window.location.protocol === 'https:')
+        ? '' : 'http://localhost:3000';
+      fetch(apiBase + '/api/auth/verify', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ token: token }),
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) {
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(TOKEN_KEY2);
+          localStorage.removeItem('gw_user');
+        }
+      })
+      .catch(function () {});
+    }, 1200);
+  })();
+  </script>
+
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/game.css" />
+  <link rel="stylesheet" href="css/briefing.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body class="game-page">
+
+  <div id="game-container" role="main" aria-label="Game battlefield"></div>
+
+  <!-- Loading screen -->
+  <div id="load-screen" aria-live="polite">
+    <div class="load-inner">
+      <h2 class="load-title">CHRONO-FRONT: GALACTIC WAR</h2>
+      <div class="load-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadProgress">
+        <div class="load-bar-fill" id="loadBarFill"></div>
+      </div>
+      <p class="load-status" id="loadStatus">Initializing…</p>
+    </div>
+  </div>
+
+  <!-- Firebase SDK (compat mode) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <!-- Phaser 3 -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+
+  <!-- Config (first — defines GW namespace) -->
+  <script src="js/config.js"></script>
+
+  <!-- New systems (load before progression) -->
+  <script src="js/game/firebase.js"></script>
+  <script src="js/game/progression.js"></script>
+  <script src="js/game/cards.js"></script>
+  <script src="js/game/sprites.js"></script>
+  <script src="js/game/briefing.js"></script>
+
+  <!-- Core game subsystems (dependency order) -->
+  <script src="js/game/levels.js"></script>
+  <script src="js/game/characters.js"></script>
+  <script src="js/game/enemies.js"></script>
+  <script src="js/game/player.js"></script>
+  <script src="js/game/resources.js"></script>
+  <script src="js/game/projectiles.js"></script>
+  <script src="js/game/collision.js"></script>
+  <script src="js/game/combat.js"></script>
+  <script src="js/game/waves.js"></script>
+  <script src="js/game/sentinel.js"></script>
+  <script src="js/game/currency.js"></script>
+  <script src="js/game/ui.js"></script>
+  <script src="js/game/scenes.js"></script>
+  <script src="js/game/game.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>
