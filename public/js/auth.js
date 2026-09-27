@@ -47,8 +47,11 @@
    * Do not use localhost for a publicly deployed website.
    */
 
-  const API_BASE = "https://jvnbasicitsolutionbusiness-create.github.io/Chrono-Front-Galactic-Warfare/auth.html";
+  /* =========================================================
+   BACKEND CONFIGURATION
+========================================================= */
 
+  const API_BASE = "https://YOUR-ACTUAL-BACKEND-URL";
   const API_TIMEOUT = 20000;
 
   /* ==========================================================
