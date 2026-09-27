@@ -1,0 +1,1301 @@
+/**
+ * Chrono-Front: Galactic War — Battlefield Scene (Part 4 Rebuild)
+ *
+ * ROOT CAUSE FIXES:
+ *  1. Briefing shown after recon; waves only start after player clicks DEPLOY
+ *  2. Camera recon uses Phaser tweens (alpha fade, not scrollX which breaks FIT scale)
+ *  3. Sunflowers REMOVED from sentinel positions
+ *  4. Continuous sky animation: moving clouds, sun pulse, wind particles
+ *  5. Proper military command base with depth and details
+ *  6. Individual alien spawning at 10-15s intervals via controlled timer
+ *  7. Random plasma orbs correctly spawn in board area (TOP_OFFSET:160)
+ *  8. All board coords use new layout (TOP_OFFSET:160, boardBottom:520)
+ *  9. Wave manager state machine correctly wired
+ * 10. MENU button fully functional
+ */
+
+/* global GW, Phaser */
+
+// ═══════════════════════════════════════════════════════════
+//  BOOT SCENE
+// ═══════════════════════════════════════════════════════════
+GW.BootScene = class BootScene extends Phaser.Scene {
+  constructor() { super({ key: GW.SCENES.BOOT }); }
+
+  preload() {
+    const fill   = document.getElementById('loadBarFill');
+    const status = document.getElementById('loadStatus');
+    this.load.on('progress', v => { if (fill) fill.style.width = Math.round(v * 100) + '%'; });
+    this.load.on('complete', () => { if (fill) fill.style.width = '100%'; if (status) status.textContent = 'Ready!'; });
+  }
+
+  create() {
+    // ── Bootstrap game systems SYNCHRONOUSLY first ─────────
+    if (!GW.progression) GW.progression = new GW.ProgressionManager();
+    if (!GW.cardManager) GW.cardManager  = new GW.CardManager(GW.progression);
+
+    // Firebase init: fire-and-forget, do not block scene transition
+    if (GW.firebaseClient) GW.firebaseClient.init().catch(() => {});
+
+    // ── Staged loading messages via Phaser-native timers ────
+    // Uses only this.time.delayedCall — guaranteed to work in Phaser 3
+    const fill   = document.getElementById('loadBarFill');
+    const status = document.getElementById('loadStatus');
+    const params = new URLSearchParams(window.location.search);
+    const levelId = parseInt(params.get('level') || '1', 10);
+
+    const stages = [
+      { pct: 10, msg: 'Connecting to command…',       t: 200  },
+      { pct: 28, msg: 'Loading level data…',          t: 500  },
+      { pct: 48, msg: 'Initializing battle systems…', t: 900  },
+      { pct: 66, msg: 'Deploying sentinels…',         t: 1300 },
+      { pct: 82, msg: 'Scanning alien signatures…',   t: 1700 },
+      { pct: 95, msg: 'Stand by for deployment…',     t: 2200 },
+      { pct:100, msg: 'Mission begins…',              t: 2600 },
+    ];
+
+    stages.forEach(st => {
+      this.time.delayedCall(st.t, () => {
+        if (status) status.textContent = st.msg;
+        if (fill)   fill.style.width   = st.pct + '%';
+      });
+    });
+
+    // Hide load screen and start GameScene after all stages
+    const TOTAL = 3100;
+    this.time.delayedCall(TOTAL, () => {
+      const loadScreen = document.getElementById('load-screen');
+      if (loadScreen) {
+        loadScreen.classList.add('fade-out');
+        // Remove from DOM after CSS transition (0.6s)
+        this.time.delayedCall(650, () => {
+          loadScreen.classList.add('gone');
+        });
+      }
+    });
+
+    // Start gameplay scene slightly after load screen begins fading
+    this.time.delayedCall(TOTAL + 400, () => {
+      this.scene.start(GW.SCENES.GAME, { levelId });
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════
+//  GAME SCENE — Main battlefield
+// ═══════════════════════════════════════════════════════════
+GW.GameScene = class GameScene extends Phaser.Scene {
+  constructor() { super({ key: GW.SCENES.GAME }); }
+
+  init(data) {
+    this.levelId         = (data && data.levelId) ? data.levelId : 1;
+    this._gameOver       = false;
+    this._gameWon        = false;
+    this._selectedCharId = null;
+    this._paused         = false;
+    this._reconDone      = false;
+  }
+
+  create() {
+    try {
+    const W = GW.DISPLAY.BASE_WIDTH;   // 960
+    const H = GW.DISPLAY.BASE_HEIGHT;  // 600
+
+    const levelData = GW.LEVELS[this.levelId] || GW.LEVELS[1];
+    const envId     = levelData.environment || 'daytime';
+    const env       = GW.ENVIRONMENTS[envId] || GW.ENVIRONMENTS.daytime;
+
+    // ── Loadout: only claimed cards, max 6 ─────────────────
+    const prog      = window.GW && window.GW.progression;
+    // Build the card pool for this level:
+    //   Start with the level's minimum whitelist (always included).
+    //   Then add ALL cards the player has claimed — so newly unlocked cards
+    //   appear in the tray immediately without needing the level config updated.
+    const levelWhitelist = levelData.availableDefenders || GW.LOADOUT.DEFAULT_CARDS;
+    const claimedByPlayer = prog && prog.getClaimedCardIds ? prog.getClaimedCardIds() : [];
+    // Union: whitelist + any extra claimed cards, preserving order (whitelist first)
+    const poolSet = new Set([...levelWhitelist, ...claimedByPlayer]);
+    const loadout = Array.from(poolSet)
+      .filter(id => GW.CARDS && GW.CARDS[id])            // only valid card ids
+      .filter(id => prog ? (prog.isCardClaimed ? prog.isCardClaimed(id) : true) : true)
+      .slice(0, GW.LOADOUT.MAX_CARDS);                   // cap at 6
+
+    // ── Core subsystems ────────────────────────────────────
+    this.playerState       = new GW.PlayerState();
+    this.playerState.levelId = this.levelId;
+    this.resourceManager   = new GW.ResourceManager(this);
+    this.resourceManager.energy = levelData.startingEnergy || GW.RESOURCES.STARTING_ENERGY;
+    this.projectileManager = new GW.ProjectileManager(this);
+    this.combatManager     = new GW.CombatManager(this, this.projectileManager, this.resourceManager, this.playerState);
+    this.levelManager      = new GW.LevelManager();
+    this.uiManager         = new GW.UIManager(this, this.resourceManager);
+    this.uiManager.setLoadout(loadout);
+    this.waveManager       = new GW.WaveManager(this, this.combatManager, levelData.waves);
+    this.sentinelMgr       = new GW.SentinelManager(this);
+    this.currencyManager   = new GW.CurrencyManager(this);
+
+    // ── World layers (draw order matters) ──────────────────
+    this._drawSky(W, H, env);
+    this._drawMidground(W, H, env);
+    this._drawBoard(W, H, env);
+    this._drawMilitaryBase(H, env);
+    this._drawEnvironmentDecor(W, H, env);
+
+    // ── Sentinels (BEFORE clouds animation layer) ──────────
+    this.sentinelMgr.build(levelData);
+
+    // ── HUD ────────────────────────────────────────────────
+    // Flag count by environment/level spec:
+    // daytime L1-9: 1 flag, daytime L10+: 2 flags
+    // nighttime: 2 flags, foggy: 3 flags
+    // rainy_stormy: 4 flags (all levels)
+    // radioactive L1-9: 5 flags, radioactive L10 (boss): 5 flags
+    const _flagCount = GW.GameScene._getFlagCount(envId, this.levelId);
+    this.uiManager.buildHUD(_flagCount);
+    this.currencyManager.buildHUD();
+
+    // ── Pause callbacks ────────────────────────────────────
+    this.uiManager.onPauseRestart = () => this._restart();
+    this.uiManager.onPauseToMap   = () => this._goToMenu();
+    this.uiManager.onPauseQuit    = () => this._goToMenu();
+
+    // ── Wire game callbacks ────────────────────────────────
+    this._wireCallbacks(levelData);
+    this._setupInput(W, H);
+
+    // ── Start resource regen immediately; waves wait for Deploy ──
+    // Wave manager is NOT started here — it starts only after the player
+    // clicks the DEPLOY button in the briefing overlay. This ensures the
+    // 20-second preparation countdown doesn't begin until the player is ready.
+    this.resourceManager.startRegen();
+    this._wavesStarted = false;
+    if (this.uiManager.energyText) this.uiManager.energyText.setText(String(this.resourceManager.energy));
+
+    // ── Animated environment (continuous) ──────────────────
+    this._startEnvironmentAnimation(W, H, env);
+
+    // Smooth fade-in from black to reveal the battlefield
+    this.cameras.main.fadeIn(800, 0, 0, 0);
+
+    // ── Intro recon + briefing overlay ──────────────────────
+    // _playRecon() plays the cinematic intro (daytime L1-5 only), then
+    // shows the mission briefing. Waves don't start until Deploy is clicked.
+    this._playRecon(W, H, envId, this.levelId);
+    } catch (err) {
+      console.error('[GW] GameScene.create() FAILED:', err);
+      // Emergency fallback: draw a minimal battlefield so the player isn't stuck
+      this._emergencyFallback(err);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  CAMERA RECON — Cinematic sweep overlay (non-blocking, ~3s total)
+  //  Phase 1 (0–600ms):   Reveal right side (alien zone), alien labels
+  //  Phase 2 (600–2200ms): Scan line sweeps right→left, alien labels fade
+  //  Phase 3 (2000–2600ms): Base revealed, base labels appear then fade
+  //  Phase 4 (2900–3200ms): Scan line fades, all overlays destroyed
+  //  Gameplay runs underneath the entire time.
+  // ══════════════════════════════════════════════════════════
+  /**
+   * Intro recon sequence — requirements 1-6.
+   * Only plays for Daytime levels 1-5. Always fires the prepare banner.
+   * With intro: banner fires after ~3.2s. Without intro: fires after 200ms.
+   */
+  _playRecon(W, H, envId, levelId) {
+    // Req 1+4: intro only for daytime levels 1 through 5
+    const showIntro = (envId === 'daytime') && (levelId >= 1) && (levelId <= 5);
+
+    if (!showIntro) {
+      // No intro: show briefing immediately so the player can click Deploy
+      if (GW.briefingSystem) {
+        GW.briefingSystem.show(this.levelId)
+          .then(() => this._onDeployClicked())
+          .catch(() => this._onDeployClicked());
+      } else {
+        this._onDeployClicked();
+      }
+      return;
+    }
+
+    const DEPTH_OVERLAY = 200;
+    const DEPTH_TEXT    = 201;
+
+    // ── Full black start ──────────────────────────────────────
+    const blackRect = this.add.rectangle(W/2, H/2, W, H, 0x000000, 1).setDepth(DEPTH_OVERLAY);
+
+    // ── PHASE LABELS ─────────────────────────────────────────
+    // Phase 1: Alien zone label (right side)
+    const alienLabel = this.add.text(W * 0.72, H/2 - 10, '[ ALIEN INVASION ZONE ]', {
+      fontFamily: '"Exo 2", monospace', fontSize: '16px', fontStyle: 'bold',
+      color: '#e879f9', stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(DEPTH_TEXT).setAlpha(0);
+
+    const alienSub = this.add.text(W * 0.72, H/2 + 14, 'Scanning enemy approach vector\u2026', {
+      fontFamily: '"Exo 2", monospace', fontSize: '10px', color: '#a78bfa',
+    }).setOrigin(0.5).setDepth(DEPTH_TEXT).setAlpha(0);
+
+    // Phase 3: Base label (left side)
+    const baseLabel = this.add.text(W * 0.08, H/2 - 10, '[ YOUR BASE ]', {
+      fontFamily: '"Exo 2", monospace', fontSize: '16px', fontStyle: 'bold',
+      color: '#4ade80', stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(DEPTH_TEXT).setAlpha(0);
+
+    const baseSub = this.add.text(W * 0.08, H/2 + 14, 'Defend the perimeter.', {
+      fontFamily: '"Exo 2", monospace', fontSize: '10px', color: '#86efac',
+    }).setOrigin(0.5).setDepth(DEPTH_TEXT).setAlpha(0);
+
+    // ── Scan cover panel (unused width, kept for cleanup) ─────
+    const scanPanel = this.add.rectangle(0, H/2, 0, H, 0x000000, 0.85)
+      .setOrigin(0, 0.5).setDepth(DEPTH_OVERLAY - 1);
+
+    // ── Scan line: bright vertical bar sweeping right→left ────
+    const scanLine = this.add.rectangle(W, H/2, 3, H, 0x7c3aed, 0.9)
+      .setDepth(DEPTH_OVERLAY + 1);
+
+    // ── TIMELINE ─────────────────────────────────────────────
+    // t=0–400:   black rect fades from 1→0.6 (reveal right side dimly)
+    this.tweens.add({
+      targets: blackRect, alpha: 0.6,
+      duration: 400, ease: 'Power2',
+    });
+
+    // t=200–500: alien labels fade in
+    this.time.delayedCall(200, () => {
+      this.tweens.add({ targets: [alienLabel, alienSub], alpha: 1, duration: 300, ease: 'Power1' });
+    });
+
+    // t=0–1800:  scan line sweeps from right (W) to left (-10)
+    this.tweens.add({
+      targets: scanLine, x: -10,
+      duration: 1800, ease: 'Sine.easeInOut',
+    });
+
+    // t=600–1800: black rect fades further as scan progresses
+    this.time.delayedCall(600, () => {
+      this.tweens.add({ targets: blackRect, alpha: 0.25, duration: 1200, ease: 'Power1' });
+    });
+
+    // t=1400–1700: alien text fades out during pan
+    this.time.delayedCall(1400, () => {
+      this.tweens.add({ targets: [alienLabel, alienSub], alpha: 0, duration: 300, ease: 'Power1' });
+    });
+
+    // t=2000:    black rect fully clears, base labels appear
+    this.time.delayedCall(2000, () => {
+      this.tweens.add({ targets: blackRect, alpha: 0, duration: 400, ease: 'Power2' });
+      this.tweens.add({ targets: [baseLabel, baseSub], alpha: 1, duration: 300, ease: 'Power1' });
+    });
+
+    // t=2600–2950: base labels fade out
+    this.time.delayedCall(2600, () => {
+      this.tweens.add({ targets: [baseLabel, baseSub], alpha: 0, duration: 350, ease: 'Power1' });
+    });
+
+    // t=2900–3200: scan line fades, cleanup, mark recon done
+    this.time.delayedCall(2900, () => {
+      this.tweens.add({
+        targets: scanLine, alpha: 0, duration: 300, ease: 'Power2',
+        onComplete: () => {
+          [blackRect, alienLabel, alienSub, baseLabel, baseSub, scanPanel, scanLine].forEach(obj => {
+            if (obj && obj.scene) obj.destroy();
+          });
+          this._reconDone = true;
+          // After recon completes, show the briefing overlay.
+          // The wave manager + prep banner fire only when the player clicks DEPLOY.
+          if (GW.briefingSystem) {
+            GW.briefingSystem.show(this.levelId)
+              .then(() => this._onDeployClicked())
+              .catch(() => this._onDeployClicked());
+          } else {
+            this._onDeployClicked();
+          }
+        },
+      });
+    });
+
+    // Safety fallback: if tweens/timers fail for any reason, force-clear the overlay
+    // after 6 seconds so the player is never permanently blocked.
+    this.time.delayedCall(6000, () => {
+      if (!this._reconDone) {
+        console.warn('[GW] Recon fallback triggered — forcing overlay clear');
+        [blackRect, alienLabel, alienSub, baseLabel, baseSub, scanPanel, scanLine].forEach(obj => {
+          try { if (obj && obj.scene) obj.destroy(); } catch (_) {}
+        });
+        this._reconDone = true;
+        if (GW.briefingSystem) {
+          GW.briefingSystem.show(this.levelId)
+            .then(() => this._onDeployClicked())
+            .catch(() => this._onDeployClicked());
+        } else {
+          this._onDeployClicked();
+        }
+      }
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  DEPLOY — Called when the player clicks the DEPLOY button
+  //  in the mission briefing overlay. This is the moment the
+  //  20-second preparation countdown actually begins.
+  // ══════════════════════════════════════════════════════════
+  _onDeployClicked() {
+    if (this._wavesStarted) return; // guard against double-fire
+    this._wavesStarted = true;
+
+    // Show the "20 sec to prepare" banner immediately on Deploy
+    if (this.uiManager && this.uiManager.showBanner) {
+      this.uiManager.showBanner(
+        '20 SEC TO PREPARE \u2014 PLACE YOUR FORCES!',
+        GW.UI_COLORS ? GW.UI_COLORS.GREEN_BRIGHT : '#22d3ee',
+        2800
+      );
+    }
+
+    // Start the wave manager — its INITIAL_DELAY (20 000 ms) is the
+    // actual gap before the first alien spawns, matching the banner message.
+    this.waveManager.start();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  SKY BACKGROUND — Fills 0 to TOP_OFFSET (160px)
+  // ══════════════════════════════════════════════════════════
+  _drawSky(W, H, env) {
+    const bg  = this.add.graphics().setDepth(0);
+    const TOP = GW.BOARD.TOP_OFFSET; // 160
+    const BOT = TOP + GW.BOARD.LANES * GW.BOARD.LANE_HEIGHT; // 520
+
+    if (env.id === 'daytime') {
+      // Sky gradient
+      bg.fillGradientStyle(0x3ea8e5, 0x3ea8e5, 0x7dd3fc, 0x7dd3fc, 1);
+      bg.fillRect(0, 0, W, TOP);
+
+      // Distant hills (layered depth)
+      const hills = this.add.graphics().setDepth(1);
+      hills.fillStyle(0x4e9e3a, 0.35);
+      hills.fillEllipse(200, TOP + 2, 320, 80);
+      hills.fillEllipse(550, TOP + 5, 280, 65);
+      hills.fillEllipse(850, TOP + 3, 240, 70);
+      hills.fillStyle(0x5aaf42, 0.28);
+      hills.fillEllipse(100, TOP + 8, 200, 55);
+      hills.fillEllipse(400, TOP + 4, 350, 72);
+      hills.fillEllipse(750, TOP + 6, 300, 60);
+
+      // Far trees silhouette
+      const farTrees = this.add.graphics().setDepth(2);
+      farTrees.fillStyle(0x2d6b1a, 0.6);
+      for (let tx = 0; tx < W + 20; tx += 28) {
+        const h = 22 + Math.abs(Math.sin(tx * 0.08)) * 14;
+        farTrees.fillTriangle(tx + 2, TOP - 2, tx + 14, TOP - 2 - h, tx + 26, TOP - 2);
+        farTrees.fillRect(tx + 10, TOP - 2, 8, h * 0.38);
+      }
+
+      // Sun — drawn here, animated separately
+      this._sun = this.add.graphics().setDepth(3);
+      this._drawSun(this._sun);
+
+    } else if (env.id === 'nighttime') {
+      bg.fillGradientStyle(0x020810, 0x020810, 0x060f1e, 0x060f1e, 1);
+      bg.fillRect(0, 0, W, TOP);
+      // Stars — many more due to 160px sky
+      const stars = this.add.graphics().setDepth(1);
+      stars.fillStyle(0xffffff, 0.75);
+      const starPositions = [
+        [22,8,1.1],[68,18,0.8],[115,7,1.0],[170,22,0.9],[225,10,1.2],[285,5,0.8],
+        [340,20,1.0],[395,12,0.9],[450,6,1.1],[505,24,0.8],[560,11,1.0],[615,18,0.9],
+        [670,6,1.2],[725,22,0.8],[780,9,1.0],[835,16,0.9],[890,5,1.1],[945,20,0.8],
+        [40,40,0.9],[95,50,1.0],[150,38,0.8],[210,55,0.9],[265,44,1.1],[320,36,0.8],
+        [375,52,1.0],[430,42,0.9],[485,58,0.8],[540,48,1.0],[595,35,0.9],[650,54,1.1],
+        [705,46,0.8],[760,38,1.0],[815,52,0.9],[870,40,1.2],[925,34,0.8],[50,70,0.9],
+        [130,75,1.0],[200,65,0.8],[310,80,0.9],[410,68,1.1],[510,76,0.8],[630,72,1.0],
+      ];
+      starPositions.forEach(([x, y, r]) => stars.fillCircle(x, y, r));
+      // Moon
+      const moon = this.add.graphics().setDepth(2);
+      moon.fillStyle(0xfef9c3, 0.95); moon.fillCircle(W - 80, 38, 24);
+      moon.fillStyle(0x020810, 1); moon.fillCircle(W - 67, 32, 18);
+    } else if (env.id === 'foggy') {
+      bg.fillGradientStyle(0x7a8fa0, 0x7a8fa0, 0xb8cad4, 0xb8cad4, 1);
+      bg.fillRect(0, 0, W, TOP);
+      const fog = this.add.graphics().setDepth(2);
+      fog.fillStyle(0xd4dde4, 0.55); fog.fillRect(0, TOP - 55, W, 65);
+      fog.fillStyle(0xe8edf0, 0.4);  fog.fillRect(0, TOP - 28, W, 38);
+    } else if (env.id === 'rainy_stormy') {
+      bg.fillGradientStyle(0x0b1824, 0x0b1824, 0x162338, 0x162338, 1);
+      bg.fillRect(0, 0, W, TOP);
+      const storm = this.add.graphics().setDepth(2);
+      storm.fillStyle(0x24364a, 0.7);
+      [[90,22,180,55],[300,14,220,62],[520,26,200,58],[740,18,170,52]].forEach(
+        ([cx,cy,rw,rh]) => storm.fillEllipse(cx,cy,rw,rh)
+      );
+    } else if (env.id === 'radioactive') {
+      bg.fillGradientStyle(0x080e02, 0x080e02, 0x112206, 0x112206, 1);
+      bg.fillRect(0, 0, W, TOP);
+      const glow = this.add.graphics().setDepth(2);
+      glow.fillStyle(0x44bb00, 0.06); glow.fillRect(0, 0, W, TOP);
+      glow.fillStyle(0x88dd11, 0.12); glow.fillRect(0, TOP - 45, W, 48);
+    }
+
+    // Ground strip: 520-600 (thin, not massive)
+    const BOT2 = TOP + GW.BOARD.LANES * GW.BOARD.LANE_HEIGHT;
+    bg.fillStyle(env.soilColor || 0x5a3010, 1);
+    bg.fillRect(0, BOT2, W, H - BOT2);
+    // Grass transition
+    bg.fillStyle(env.grassColor || 0x2d8a18, 1);
+    bg.fillRect(0, BOT2 - 9, W, 14);
+  }
+
+  _drawSun(g) {
+    g.clear();
+    const sx = 820, sy = 42;
+    g.fillStyle(0xfde68a, 0.15); g.fillCircle(sx, sy, 38);
+    g.fillStyle(0xfef08a, 0.3);  g.fillCircle(sx, sy, 28);
+    g.fillStyle(0xfef08a, 1);    g.fillCircle(sx, sy, 22);
+    g.fillStyle(0xfbbf24, 0.4);  g.fillCircle(sx, sy, 16);
+  }
+
+  _startEnvironmentAnimation(W, H, env) {
+    if (env.id !== 'daytime') return;
+
+    const TOP = GW.BOARD.TOP_OFFSET;
+
+    // ── Moving cloud layer ──────────────────────────────────
+    this._cloudGraphics = this.add.graphics().setDepth(4);
+    this._cloudOffset   = 0;
+    this._cloudSpeed    = 14; // px/s slow drift
+
+    // Cloud definitions: [x, y, w, h, speed_mult]
+    this._clouds = [
+      { x: 70,  y: 22, w: 80, h: 28, sm: 1.0 },
+      { x: 220, y: 14, w: 100, h: 32, sm: 0.7 },
+      { x: 420, y: 32, w: 85, h: 26, sm: 1.3 },
+      { x: 610, y: 18, w: 95, h: 30, sm: 0.85 },
+      { x: 780, y: 28, w: 70, h: 24, sm: 1.2 },
+      { x: 900, y: 12, w: 60, h: 20, sm: 0.65 },
+      // Second layer (wrap-around clouds start offscreen right)
+      { x: 1050, y: 25, w: 90, h: 28, sm: 1.0 },
+      { x: 1200, y: 15, w: 75, h: 24, sm: 0.8 },
+    ];
+
+    // ── Sun pulse tween ─────────────────────────────────────
+    if (this._sun) {
+      this.tweens.add({
+        targets: this._sun,
+        alpha: 0.82,
+        duration: 3200,
+        ease: 'Sine.easeInOut',
+        yoyo: true,
+        repeat: -1,
+      });
+    }
+
+    // ── Wind/grass particles ────────────────────────────────
+    this._windTimer = 0;
+    this._nextWind  = 6000 + Math.random() * 4000;
+  }
+
+  _updateEnvironmentAnimation(delta) {
+    if (!this._cloudGraphics) return;
+
+    const W   = GW.DISPLAY.BASE_WIDTH;
+    const TOP = GW.BOARD.TOP_OFFSET;
+
+    // Move clouds
+    this._clouds.forEach(c => {
+      c.x -= (this._cloudSpeed * c.sm * delta) / 1000;
+      if (c.x + c.w < -20) {
+        c.x = W + 20 + Math.random() * 80;
+        c.y = 8 + Math.random() * 38;
+      }
+    });
+
+    // Redraw clouds
+    this._cloudGraphics.clear();
+    this._cloudGraphics.fillStyle(0xffffff, 0.82);
+    this._clouds.forEach(c => {
+      this._cloudGraphics.fillEllipse(c.x, c.y, c.w, c.h);
+      this._cloudGraphics.fillEllipse(c.x + c.w * 0.18, c.y - c.h * 0.3, c.w * 0.6, c.h * 0.65);
+      this._cloudGraphics.fillEllipse(c.x - c.w * 0.12, c.y + c.h * 0.15, c.w * 0.5, c.h * 0.55);
+    });
+
+    // Wind particles
+    this._windTimer += delta;
+    if (this._windTimer >= this._nextWind) {
+      this._windTimer = 0;
+      this._nextWind  = 6000 + Math.random() * 4000;
+      this._spawnWindEffect();
+    }
+  }
+
+  _spawnWindEffect() {
+    const b   = GW.BOARD;
+    const W   = GW.DISPLAY.BASE_WIDTH;
+    // Spawn a few leaf/particle objects drifting right-to-left
+    for (let i = 0; i < 4; i++) {
+      const x = W - 10 + Math.random() * 60;
+      const y = b.TOP_OFFSET + Math.random() * (b.LANES * b.LANE_HEIGHT);
+      const p = this.add.graphics().setDepth(14);
+      p.fillStyle(0x4ade80, 0.6 + Math.random() * 0.3);
+      p.fillCircle(0, 0, 2 + Math.random() * 2);
+      p.x = x; p.y = y;
+      this.tweens.add({
+        targets: p,
+        x: x - 80 - Math.random() * 60,
+        y: y + (Math.random() - 0.5) * 30,
+        alpha: 0,
+        duration: 2000 + Math.random() * 1500,
+        ease: 'Power1',
+        delay: i * 200,
+        onComplete: () => p.destroy(),
+      });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  MIDGROUND — Horizon detail
+  // ══════════════════════════════════════════════════════════
+  _drawMidground(W, H, env) {
+    const mg  = this.add.graphics().setDepth(5);
+    const TOP = GW.BOARD.TOP_OFFSET;
+
+    if (env.id === 'daytime') {
+      // Garden hedge line
+      mg.fillStyle(0x2d8a18, 0.65);
+      mg.fillRect(0, TOP - 26, W, 28);
+      // Top edge brighter grass
+      mg.fillStyle(0x3daa22, 0.5);
+      mg.fillRect(0, TOP - 32, W, 10);
+      // Fence planks
+      mg.fillStyle(0x8b4a18, 0.7);
+      mg.fillRect(0, TOP - 9, W, 9);
+      for (let fx = 8; fx < W; fx += 44) {
+        mg.fillStyle(0x7c3a10, 0.8);
+        mg.fillRect(fx, TOP - 22, 5, 24);
+        mg.fillStyle(0x5c2a08, 0.6);
+        mg.fillRect(fx - 2, TOP - 14, 10, 4);
+      }
+    } else {
+      mg.fillStyle(env.grassColor || 0x2d6b1a, 0.4);
+      mg.fillRect(0, TOP - 16, W, 18);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  BOARD — 5 lanes
+  // ══════════════════════════════════════════════════════════
+  _drawBoard(W, H, env) {
+    const b    = GW.BOARD;
+    const g    = this.add.graphics().setDepth(6);
+    const even = env.laneEven || 0x2d6b1a;
+    const odd  = env.laneOdd  || 0x26621a;
+
+    for (let lane = 0; lane < b.LANES; lane++) {
+      const ly = b.TOP_OFFSET + lane * b.LANE_HEIGHT;
+
+      g.fillStyle(lane % 2 === 0 ? even : odd, 1);
+      g.fillRect(0, ly, W, b.LANE_HEIGHT);
+
+      // Soil strip
+      g.fillStyle(env.soilColor || 0x5a3010, 0.5);
+      g.fillRect(0, ly + b.LANE_HEIGHT - 8, W, 8);
+
+      // Grass tufts
+      g.fillStyle(env.grassColor || 0x2d8a18, 0.42);
+      for (let gx = 10; gx < W; gx += 38) {
+        g.fillRect(gx,      ly + 3, 2, 6);
+        g.fillRect(gx + 5,  ly + 2, 2, 8);
+        g.fillRect(gx + 10, ly + 4, 2, 5);
+        g.fillRect(gx + 18, ly + 2, 2, 7);
+      }
+
+      // Lane divider
+      g.lineStyle(1, 0x1a4a08, 0.28);
+      g.lineBetween(0, ly, W, ly);
+
+      // Lane number (subtle)
+      this.add.text(7, ly + b.LANE_HEIGHT / 2, String(lane + 1), {
+        fontFamily: '"Exo 2", monospace', fontSize: '10px', color: '#1a3a0a', alpha: 0.4,
+      }).setOrigin(0, 0.5).setDepth(7);
+    }
+
+    // Bottom board border
+    g.lineStyle(1, 0x1a4a08, 0.3);
+    g.lineBetween(0, b.TOP_OFFSET + b.LANES * b.LANE_HEIGHT, W, b.TOP_OFFSET + b.LANES * b.LANE_HEIGHT);
+
+    // Defender zone right fence
+    const fenceX = b.PLACEMENT_START_X + b.CELLS_PER_LANE * b.CELL_WIDTH + 8;
+    const fTop = b.TOP_OFFSET, fBot = b.TOP_OFFSET + b.LANES * b.LANE_HEIGHT;
+    g.fillStyle(0x8b4a18, 0.8); g.fillRect(fenceX - 3, fTop, 6, fBot - fTop);
+    for (let i = 0; i <= b.LANES; i++) {
+      const py = fTop + i * b.LANE_HEIGHT;
+      g.fillStyle(0x6b3410, 0.9); g.fillRect(fenceX - 5, py - 7, 10, 14);
+    }
+
+    // Zone labels
+    this.add.text(b.PLACEMENT_START_X + (b.CELLS_PER_LANE * b.CELL_WIDTH) / 2, b.TOP_OFFSET - 8,
+      'DEFENDERS', { fontFamily: '"Exo 2",monospace', fontSize: '8px', color: '#2d6b1a' }
+    ).setOrigin(0.5, 1).setDepth(7);
+    this.add.text(fenceX + (W - fenceX) / 2, b.TOP_OFFSET - 8,
+      '⚠ ALIEN APPROACH ZONE', { fontFamily: '"Exo 2",monospace', fontSize: '8px', color: '#6b2fa0' }
+    ).setOrigin(0.5, 1).setDepth(7);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  MILITARY COMMAND BASE — full depth pixel-art building
+  //  Position: left of HOME_X (x=68), spans full lane height
+  // ══════════════════════════════════════════════════════════
+  _drawMilitaryBase(H, env) {
+    const b   = GW.BOARD;
+    const g   = this.add.graphics().setDepth(8);
+    const wx  = b.HOME_X;
+    const top = b.TOP_OFFSET;
+    const bot = top + b.LANES * b.LANE_HEIGHT;
+    const bw  = 56;   // building width
+    const bx  = wx - bw - 2; // building left edge
+
+    // ── LAYER 1: Deep background shadow ──
+    g.fillStyle(0x111111, 0.35);
+    g.fillRect(bx + 4, top + 4, bw, bot - top);
+
+    // ── LAYER 2: Main wall structure ──
+    g.fillStyle(0x3a4a5a, 0.95);
+    g.fillRect(bx, top, bw, bot - top);
+
+    // Concrete texture lines
+    g.fillStyle(0x2e3e4e, 0.55);
+    for (let ry = top + 20; ry < bot; ry += 26) {
+      g.fillRect(bx, ry, bw, 3);
+    }
+
+    // ── LAYER 3: Wall panels (highlight edges) ──
+    g.fillStyle(0x4a5e72, 0.6);
+    g.fillRect(bx, top, 4, bot - top);      // left edge
+    g.fillStyle(0x2a3848, 0.7);
+    g.fillRect(bx + bw - 4, top, 4, bot - top); // right edge
+    g.fillRect(bx + bw - 4, top, 4, 4);    // corner
+
+    // ── LAYER 4: Per-lane windows ──
+    for (let lane = 0; lane < b.LANES; lane++) {
+      const wy = top + lane * b.LANE_HEIGHT + b.LANE_HEIGHT / 2;
+      // Window frame
+      g.fillStyle(0x1a2030, 0.95);
+      g.fillRoundedRect(bx + 8, wy - 12, 24, 22, 2);
+      // Window glass with light
+      const isLit = lane % 2 === 0;
+      g.fillStyle(isLit ? 0x7dd3fc : 0x4a6080, isLit ? 0.6 : 0.3);
+      g.fillRoundedRect(bx + 10, wy - 10, 20, 18, 2);
+      // Window reflection
+      if (isLit) {
+        g.fillStyle(0xffffff, 0.25);
+        g.fillRect(bx + 11, wy - 9, 6, 4);
+      }
+      // Window sill
+      g.fillStyle(0x5a6a7a, 0.8);
+      g.fillRect(bx + 7, wy + 10, 26, 4);
+    }
+
+    // ── LAYER 5: Roof structure ──
+    g.fillStyle(0x2a3848, 0.95);
+    g.fillRect(bx - 4, top - 14, bw + 8, 16);
+    // Battlements
+    for (let bt = bx; bt < bx + bw; bt += 12) {
+      g.fillStyle(0x3a4a5a, 0.9);
+      g.fillRect(bt, top - 26, 8, 14);
+    }
+    // Parapet edge
+    g.fillStyle(0x4a5e72, 0.7);
+    g.fillRect(bx - 4, top - 14, bw + 8, 3);
+
+    // ── LAYER 6: Antenna / radio mast ──
+    g.fillStyle(0x7a8a9a, 0.9);
+    g.fillRect(bx + bw / 2 - 2, top - 52, 3, 40);
+    // Crossbar
+    g.fillStyle(0x8a9aaa, 0.8);
+    g.fillRect(bx + bw / 2 - 14, top - 38, 28, 2);
+    g.fillRect(bx + bw / 2 - 10, top - 28, 20, 2);
+    // Blinking red light
+    this._antennaLight = this.add.graphics().setDepth(9);
+    this._antennaLight.fillStyle(0xef4444, 1);
+    this._antennaLight.fillCircle(bx + bw / 2, top - 54, 3);
+    // Blink animation
+    this.tweens.add({
+      targets: this._antennaLight, alpha: 0.1,
+      duration: 600, ease: 'Power2', yoyo: true, repeat: -1,
+    });
+
+    // ── LAYER 7: Door (center of building at bottom) ──
+    g.fillStyle(0x1a2030, 0.95);
+    g.fillRoundedRect(bx + bw / 2 - 9, bot - 30, 18, 28, 2);
+    g.fillStyle(0x2a3848, 0.8);
+    g.fillRoundedRect(bx + bw / 2 - 7, bot - 28, 14, 24, 2);
+    // Door handle
+    g.fillStyle(0x8a9aaa, 1);
+    g.fillCircle(bx + bw / 2 + 4, bot - 18, 2);
+    // Door frame
+    g.lineStyle(1.5, 0x5a6a7a, 0.8);
+    g.strokeRoundedRect(bx + bw / 2 - 9, bot - 30, 18, 28, 2);
+
+    // ── LAYER 8: Supply crates at base ──
+    const crates = [[bx + 4, bot - 18], [bx + 16, bot - 18], [bx + 28, bot - 18]];
+    crates.forEach(([cx, cy]) => {
+      g.fillStyle(0x8b4a18, 0.9); g.fillRect(cx, cy, 11, 11);
+      g.fillStyle(0x6b3410, 0.6);
+      g.fillRect(cx, cy + 4, 11, 2);
+      g.fillRect(cx + 4, cy, 3, 11);
+      g.lineStyle(1, 0xaa6030, 0.5);
+      g.strokeRect(cx, cy, 11, 11);
+    });
+
+    // ── LAYER 9: HQ sign ──
+    g.fillStyle(0x1a2030, 0.9); g.fillRoundedRect(bx + 14, top + 6, 26, 12, 2);
+    g.fillStyle(0xfbbf24, 0.85); g.fillRoundedRect(bx + 15, top + 7, 24, 10, 2);
+    this.add.text(bx + 27, top + 12, 'HQ', {
+      fontFamily: '"Exo 2",monospace', fontSize: '8px', fontStyle: 'bold', color: '#1a2030',
+    }).setOrigin(0.5).setDepth(9);
+
+    // ── LAYER 10: HOME BASE line (glowing green) ──
+    g.lineStyle(2, 0x4ade80, 0.65);
+    g.lineBetween(wx, top, wx, bot);
+    g.lineStyle(14, 0x4ade80, 0.05);
+    g.lineBetween(wx, top, wx, bot);
+
+    this.add.text(wx - bw / 2, top - 30, 'HOME BASE', {
+      fontFamily: '"Exo 2",monospace', fontSize: '9px', fontStyle: 'bold', color: '#86efac',
+    }).setOrigin(0.5, 1).setDepth(9);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  ENVIRONMENT DECORATIONS
+  //  NOTE: NO FLOWERS AT SENTINEL POSITIONS (bx + b.HOME_X area)
+  //  Sentinels are at SENTINEL_X=28, well to the left of HOME_X=68
+  // ══════════════════════════════════════════════════════════
+  _drawEnvironmentDecor(W, H, env) {
+    const b  = GW.BOARD;
+    const g  = this.add.graphics().setDepth(7);
+    const lH = b.LANE_HEIGHT;
+
+    // Sandbag defense positions — between sentinel line and home base
+    // IMPORTANT: Keep x > 40 (sentinel zone) and < HOME_X (68)
+    for (let ln = 0; ln < b.LANES; ln++) {
+      const ly = b.TOP_OFFSET + ln * lH + lH * 0.52;
+      // Position between sentinel (x≈28) and home wall (x=68)
+      const sx = 50; // clear of both sentinel and home
+      g.fillStyle(0x8b7355, 0.85); g.fillRoundedRect(sx, ly - 9, 16, 9, 3);
+      g.fillStyle(0x7a6448, 0.85); g.fillRoundedRect(sx + 2, ly - 17, 12, 9, 3);
+    }
+
+    if (env.id === 'daytime') {
+      // Garden plants IN the lanes (middle area — well away from sentinels)
+      // Keep cx > 150 to not conflict with sentinel/base area
+      const plantSpots = [
+        [165, 2], [165, 4], [240, 1], [240, 3], [240, 5],
+        [310, 2], [360, 4], [400, 1], [440, 3],
+      ];
+      plantSpots.forEach(([cx, lane]) => {
+        const py = b.TOP_OFFSET + (lane - 1) * lH + lH - 13;
+        g.fillStyle(0x166534, 0.75); g.fillCircle(cx, py, 9);
+        g.fillStyle(0x15803d, 0.6);
+        g.fillCircle(cx - 5, py - 3, 6);
+        g.fillCircle(cx + 5, py - 3, 6);
+        // Flower — ONLY in middle of field, NOT near sentinel positions
+        const flHue = [0xfbbf24, 0xef4444, 0xf9a8d4][(Math.floor(cx / 70)) % 3];
+        g.fillStyle(flHue, 0.9); g.fillCircle(cx, py - 9, 3.5);
+      });
+
+      // Barrels (odd lanes only, near base but not at sentinel x)
+      [1, 3].forEach(ln => {
+        const ly = b.TOP_OFFSET + ln * lH + lH * 0.5;
+        const bx2 = b.HOME_X + 10; // right of home wall
+        g.fillStyle(0x374151, 0.8); g.fillRect(bx2, ly - 13, 14, 22);
+        g.fillStyle(0x4b5563, 0.6);
+        g.fillRect(bx2, ly - 13, 14, 3);
+        g.fillRect(bx2, ly - 3,  14, 3);
+        g.fillRect(bx2, ly + 7,  14, 3);
+      });
+
+    } else if (env.id === 'nighttime') {
+      [2, 4].forEach(lane => {
+        const ly = b.TOP_OFFSET + (lane - 0.5) * lH;
+        g.fillStyle(0xfef08a, 0.2);
+        g.fillTriangle(b.HOME_X + 12, ly, b.HOME_X + 90, ly - 45, b.HOME_X + 90, ly + 45);
+      });
+    } else if (env.id === 'radioactive') {
+      [1, 2, 3, 4, 5].forEach(lane => {
+        const ly = b.TOP_OFFSET + (lane - 0.5) * lH;
+        g.fillStyle(0x84cc16, 0.25); g.fillCircle(b.HOME_X + 18, ly, 14);
+        g.fillStyle(0x4b5563, 0.85); g.fillRect(b.HOME_X + 10, ly - 14, 16, 24);
+      });
+    }
+
+    // Alien approach markers (right edge, subtle)
+    const warnX = W - b.RIGHT_MARGIN - 12;
+    for (let ln = 0; ln < b.LANES; ln++) {
+      const sy = b.TOP_OFFSET + ln * lH + lH / 2;
+      g.fillStyle(0x7c3aed, 0.22);
+      g.fillTriangle(warnX - 8, sy + 9, warnX + 8, sy + 9, warnX, sy - 9);
+      g.lineStyle(1.5, 0xc4b5fd, 0.5);
+      g.strokeTriangle(warnX - 8, sy + 9, warnX + 8, sy + 9, warnX, sy - 9);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  CALLBACKS — Wire wave/combat events to UI
+  // ══════════════════════════════════════════════════════════
+  _wireCallbacks(levelData) {
+    // DECOUPLED DESIGN:
+    //   totalWaves  = internal WaveManager wave count (scouts, pressure, majors, final)
+    //   flagCount   = visual marker count on the timeline bar (1 for daytime easy levels)
+    // The alien-head position is driven ONLY by onAlienSpawned (always forward, never backward).
+    // onWaveStart / onWaveClear only control banners and marker highlights — not head position.
+    const totalWaves = levelData.waves ? levelData.waves.length : 1;
+
+    // Count major/final waves — used to distribute flag highlights evenly
+    // across the VISUAL flag count (flagCount), NOT the raw major-wave count.
+    //
+    // Example: Level 1 has 3 major waves (wave_1, wave_2, wave_final) but only
+    // 1 visual flag on the timeline. Dividing by 3 would produce fractions
+    // 0.33 / 0.67 / 1.0, and highlightTimelineMarker's nearest-match search
+    // would snap the head to the single flag at 0.33 — a premature jump.
+    //
+    // Fix: use flagCount (= uiManager._totalWaves) as the denominator so each
+    // flag lights up at exactly the right moment. For 1 flag + 3 major waves,
+    // only clearing the 3rd (final) major wave fires the highlight at 1.0.
+    const majorWaves = levelData.waves
+      ? levelData.waves.filter(w => w.isMajorWave || w.isFinalWave)
+      : [];
+    const majorWaveCount  = Math.max(1, majorWaves.length);
+    const flagCount       = this.uiManager._totalWaves || 1;   // visual marker count
+    let   majorWavesCleared = 0;
+
+    // ── onWaveStart: no banners — head position is driven by onAlienSpawned only ─
+    this.waveManager.onWaveStart = (idx, waveDef) => { /* intentionally silent */ };
+
+    // ── onWaveClear: light up the matching flag — NEVER pull head back ─
+    this.waveManager.onWaveClear = (idx) => {
+      const waveDef = levelData.waves && levelData.waves[idx - 1];
+      const isMajor = waveDef && (waveDef.isMajorWave || waveDef.isFinalWave);
+      if (isMajor) {
+        majorWavesCleared++;
+        const prevFlagIndex = Math.floor((majorWavesCleared - 1) * flagCount / majorWaveCount);
+        const currFlagIndex = Math.floor(majorWavesCleared       * flagCount / majorWaveCount);
+        if (currFlagIndex > prevFlagIndex) {
+          const clampedIndex   = Math.min(currFlagIndex, flagCount);
+          const markerFraction = clampedIndex / flagCount;
+          this.uiManager.highlightTimelineMarker(markerFraction);
+        }
+      }
+      // No SECTOR CLEAR banner — silent between waves
+    };
+
+    this.waveManager.onCountdown = () => {};
+    this.waveManager.onAllClear  = () => this._triggerWin();
+
+    // ── onAlienSpawned: the ONLY driver of the alien-head position ──────
+    // Head moves linearly 0 → 0.95 as aliens are spawned, then jumps to 1.0 on win.
+    // This is ALWAYS forward — progress can never decrease.
+    this.waveManager.onAlienSpawned = (spawned, total) => {
+      if (total > 0) {
+        const headProgress = Math.min(0.95, spawned / total);
+        this.uiManager.updateTimelineHead(headProgress);
+      }
+    };
+
+    // ── onFlagAlien: flag-carrier enters — warn the player BEFORE head reaches flag ─
+    this.waveManager.onFlagAlien = () => {
+      // Step 1 (immediate): head moves near-but-not-at the final flag
+      this.uiManager.updateTimelineHead(0.88);
+
+      // Step 2 (immediate): big red warning — word-wrapped, shakes for urgency
+      this.uiManager.showBigBanner(
+        '⚠  A HUGE WAVE OF ALIENS IS APPROACHING!',
+        2200
+      );
+
+      // Step 3 (after 2.2s): head hits the flag; second banner confirms horde arrival
+      this.time.delayedCall(2200, () => {
+        this.uiManager.updateTimelineHead(1.0);
+        this.uiManager.showBanner(
+          'HOLD THE LINE — THE HORDE IS HERE!',
+          GW.UI_COLORS.TEXT_DANGER,
+          2000
+        );
+      });
+    };
+
+    this.combatManager.onEnemyKilled = en => {
+      this.uiManager.updateScore(this.playerState.score);
+      if (GW.progression) GW.progression.discoverEnemy(en.id);
+      // Track last kill position for the card-pop animation in _triggerWin
+      if (en && en.x !== undefined) {
+        this._lastKilledX = en.x;
+        this._lastKilledY = en.y;
+      }
+    };
+    this.combatManager.onEnemyReachedHome = () => {
+      if (!this._gameOver && !this._gameWon) this._triggerLose();
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  INPUT
+  // ══════════════════════════════════════════════════════════
+  _setupInput(W, H) {
+    this.uiManager.onCharacterSelected = id => { this._selectedCharId = id; };
+
+    this.input.on('pointerdown', ptr => {
+      if (this._gameOver || this._gameWon || this._paused || this.uiManager.isPaused) return;
+      if (!this._selectedCharId) return;
+      if (ptr.y <= GW.BOARD.TRAY_HEIGHT) return;
+      if (ptr.y >= GW.BOARD.TIMELINE_Y)  return;
+      this._tryPlaceCharacter(ptr.x, ptr.y);
+    });
+
+    this.input.on('pointermove', ptr => {
+      if (this._gameOver || this._gameWon || this._paused || this.uiManager.isPaused) return;
+      this.uiManager.updateGridHover(ptr.x, ptr.y, !!this._selectedCharId);
+    });
+
+    this.input.keyboard.on('keydown-ESC', () => {
+      this._selectedCharId = null;
+      this.uiManager.deselectAll();
+      this.uiManager.updateGridHover(-1, -1, false);
+    });
+
+    this.input.keyboard.on('keydown-P', () => this.uiManager._openPauseMenu());
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  PLACEMENT
+  // ══════════════════════════════════════════════════════════
+  _tryPlaceCharacter(worldX, worldY) {
+    const cell = GW.Collision.worldToCell(worldX, worldY);
+    if (!cell) { this._feedback(worldX, worldY, false, 'Invalid position'); return; }
+
+    const def = GW.CARDS && GW.CARDS[this._selectedCharId];
+    if (!def) return;
+
+    if (!this.resourceManager.canAfford(def.cost)) {
+      this._feedback(worldX, worldY, false, 'Need \u26a1' + def.cost); return;
+    }
+    if (GW.Collision.cellOccupied(this.combatManager.characters, cell.lane, cell.cellIndex)) {
+      this._feedback(worldX, worldY, false, 'Cell occupied'); return;
+    }
+
+    const pos       = GW.Collision.cellToWorld(cell.lane, cell.cellIndex);
+    const character = GW.CharacterFactory.create(this, this._selectedCharId, cell.lane, cell.cellIndex, pos.x, pos.y);
+
+    if (character.isSupport && character.role === 'energy') {
+      // P.E. Generator now spawns a clickable orb instead of directly adding energy.
+      // Player must click the orb to collect it.
+      character.onGenerateEnergy = (amount, cx, cy) => {
+        if (this.resourceManager.spawnGeneratorOrb) {
+          this.resourceManager.spawnGeneratorOrb(cx || character.x, cy || character.y);
+        } else {
+          this.resourceManager.earn(amount); // fallback
+        }
+      };
+      // Randomize initial timer so all generators don't tick simultaneously
+      const genMin = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 8000;
+      const genMax = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 10000;
+      character.genTimer = genMin + Math.floor(Math.random() * (genMax - genMin + 1));
+    }
+
+    this.combatManager.addCharacter(character);
+    this.resourceManager.spend(def.cost);
+    // Start per-card cooldown if configured (e.g. fire_lance_gunner = 7.5s)
+    this.uiManager.startCooldown(this._selectedCharId);
+    this._feedback(pos.x, pos.y, true, def.name + ' deployed');
+  }
+
+  _feedback(x, y, ok, msg) {
+    const color = ok ? GW.UI_COLORS.GREEN_BRIGHT : GW.UI_COLORS.TEXT_DANGER;
+    const txt = this.add.text(x, y - 20, msg, {
+      fontFamily: '"Exo 2",monospace', fontSize: '11px', fontStyle: 'bold',
+      color, stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5, 1).setDepth(46);
+    this.tweens.add({
+      targets: txt, y: txt.y - 26, alpha: 0, duration: 900, ease: 'Power2',
+      onComplete: () => txt.destroy(),
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  WIN / LOSE
+  // ══════════════════════════════════════════════════════════
+  _triggerWin() {
+    if (this._gameOver || this._gameWon) return;
+    this._gameWon = true;
+    this.resourceManager.stopRegen();
+
+    // 1. Mark level complete and unlock the next level in progression
+    if (GW.progression) GW.progression.completeLevel(this.levelId);
+
+    // 2. Determine reward card for this level
+    const levelData = GW.LEVELS[this.levelId];
+    const cardId    = levelData && levelData.reward && levelData.reward.cardId;
+
+    // 3. Queue the card as pending claim (player must manually click it)
+    if (cardId && GW.cardManager) GW.cardManager.setPendingClaim(cardId);
+
+    // 4. Determine next level
+    const nextLevelId  = this.levelId + 1;
+    const hasNextLevel = !!GW.LEVELS[nextLevelId];
+
+    this.uiManager.updateTimelineHead(1.0);
+
+    // 5. If there is a card reward, play the card-pop animation from the last
+    //    enemy position, then reveal the win screen after 10 seconds.
+    //    Without a card, wait just 0.8s (original timing).
+    const winDelay = cardId ? 10000 : 800;
+
+    if (cardId) {
+      const cardDef = GW.CARDS && GW.CARDS[cardId];
+      // Find the last enemy killed position — fall back to centre-right of board
+      const lastX = this._lastKilledX || (GW.DISPLAY.BASE_WIDTH * 0.75);
+      const lastY = this._lastKilledY || (GW.BOARD.TOP_OFFSET + GW.BOARD.LANES * GW.BOARD.LANE_HEIGHT / 2);
+
+      // Starburst flash at kill site
+      const burst = this.add.graphics().setDepth(60);
+      burst.fillStyle(0xfbbf24, 0.9);
+      burst.fillCircle(lastX, lastY, 16);
+      this.tweens.add({ targets: burst, scaleX: 4, scaleY: 4, alpha: 0, duration: 600, ease: 'Power3', onComplete: () => burst.destroy() });
+
+      // Card panel rises from the kill site to screen centre
+      const CW = 180, CH = 90;
+      const cardPanel = this.add.graphics().setDepth(61);
+      cardPanel.fillStyle(0x0a0a14, 0.97);
+      cardPanel.lineStyle(3, 0xfbbf24, 1);
+      cardPanel.fillRoundedRect(-CW / 2, -CH / 2, CW, CH, 10);
+      cardPanel.strokeRoundedRect(-CW / 2, -CH / 2, CW, CH, 10);
+      cardPanel.x = lastX; cardPanel.y = lastY;
+
+      const cardLabel = this.add.text(0, -22, '★  NEW CARD  ★', {
+        fontFamily: '"Exo 2", monospace', fontSize: '10px', fontStyle: 'bold',
+        color: '#fbbf24', stroke: '#000', strokeThickness: 2, align: 'center',
+      }).setOrigin(0.5).setDepth(62);
+
+      const cardName = this.add.text(0, 0, cardDef ? cardDef.name.toUpperCase() : cardId.toUpperCase(), {
+        fontFamily: '"Exo 2", monospace', fontSize: '15px', fontStyle: 'bold',
+        color: '#ffffff', stroke: '#000', strokeThickness: 3, align: 'center',
+      }).setOrigin(0.5).setDepth(62);
+
+      const cardRarity = this.add.text(0, 22, cardDef && cardDef.rarity ? cardDef.rarity.toUpperCase() : 'COMMON', {
+        fontFamily: '"Exo 2", monospace', fontSize: '9px',
+        color: '#a78bfa', align: 'center',
+      }).setOrigin(0.5).setDepth(62);
+
+      const clickHint = this.add.text(0, 36, '★  CLAIM AND CONTINUE  ▶', {
+        fontFamily: '"Exo 2", monospace', fontSize: '10px', fontStyle: 'bold',
+        color: '#ffffff', stroke: '#000', strokeThickness: 2, align: 'center',
+      }).setOrigin(0.5).setDepth(62);
+
+      // Target centre of screen
+      const targetX = GW.DISPLAY.BASE_WIDTH / 2;
+      const targetY = GW.DISPLAY.BASE_HEIGHT / 2 - 30;
+
+      [cardLabel, cardName, cardRarity].forEach(t => {
+        t.x = lastX; t.y = lastY + (t === cardLabel ? -22 : t === cardName ? 0 : 22);
+      });
+
+      // Animate panel + labels to screen centre
+      const panelObjs = [cardPanel, cardLabel, cardName, cardRarity];
+      this.time.delayedCall(200, () => {
+        this.tweens.add({
+          targets: cardPanel,
+          x: targetX, y: targetY,
+          scaleX: 1.35, scaleY: 1.35,
+          duration: 700, ease: 'Back.easeOut',
+        });
+        [cardLabel, cardName, cardRarity].forEach(t => {
+          this.tweens.add({ targets: t, x: targetX, y: targetY + (t === cardLabel ? -22 : t === cardName ? 0 : 22), duration: 700, ease: 'Back.easeOut' });
+        });
+        // Pulse the panel
+        this.tweens.add({ targets: cardPanel, alpha: 0.7, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      });
+
+      // ── CLAIM AND CONTINUE button ──────────────────────────────────────
+      // Orange pill button below the card panel. Clicking immediately claims
+      // the card and shows the win screen. Auto-fires after 10s if not clicked.
+      const BW = 220, BH = 36;
+      const btnX = targetX - BW / 2;
+      const btnY = targetY + 80;
+
+      const btnBg = this.add.graphics().setDepth(63);
+      const drawBtn = (hover) => {
+        btnBg.clear();
+        btnBg.fillStyle(hover ? 0xf59e0b : 0xd97706, 1);
+        btnBg.lineStyle(2, 0xfbbf24, 0.9);
+        btnBg.fillRoundedRect(btnX, btnY, BW, BH, 8);
+        btnBg.strokeRoundedRect(btnX, btnY, BW, BH, 8);
+      };
+      drawBtn(false);
+
+      const btnTxt = this.add.text(targetX, btnY + BH / 2, '★  CLAIM AND CONTINUE  ▶', {
+        fontFamily: '"Exo 2", monospace', fontSize: '11px', fontStyle: 'bold',
+        color: '#ffffff', stroke: '#000', strokeThickness: 2, align: 'center',
+      }).setOrigin(0.5).setDepth(64);
+
+      const btnZone = this.add.rectangle(targetX, btnY + BH / 2, BW, BH, 0x000000, 0)
+        .setDepth(65).setInteractive({ useHandCursor: true });
+      btnZone.on('pointerover',  () => drawBtn(true));
+      btnZone.on('pointerout',   () => drawBtn(false));
+
+      // Shared claim-and-proceed function — used by both click and auto-timer
+      const claimAndProceed = () => {
+        cdTimer.remove(false);
+        btnZone.removeAllListeners();
+        [btnBg, btnTxt, btnZone].forEach(o => { try { o.destroy(); } catch (_) {} });
+        panelObjs.forEach(o => { try { o.destroy(); } catch (_) {} });
+        if (countdown && countdown.scene) countdown.destroy();
+        this.uiManager.showWinScreen(
+          this.playerState, this.levelId, cardId,
+          () => this._restart(),
+          () => this._goToMenu(),
+          hasNextLevel ? () => this._goToNextLevel(nextLevelId) : null
+        );
+      };
+
+      btnZone.on('pointerdown', claimAndProceed);
+
+      // Countdown label
+      const countdown = this.add.text(targetX, btnY + BH + 10, 'Auto-claiming in 10…', {
+        fontFamily: '"Exo 2", monospace', fontSize: '9px', color: '#6b7280', align: 'center',
+      }).setOrigin(0.5).setDepth(62);
+
+      let secs = 10;
+      const cdTimer = this.time.addEvent({
+        delay: 1000, repeat: 9,
+        callback: () => {
+          secs--;
+          if (countdown && countdown.scene) {
+            countdown.setText(secs > 0 ? ('Auto-claiming in ' + secs + '…') : 'Claiming…');
+          }
+        },
+      });
+
+      // Auto-fire after 10s
+      this.time.delayedCall(winDelay, claimAndProceed);
+
+    } else {
+      // No card reward — short delay then win screen
+      this.time.delayedCall(winDelay, () => {
+        this.uiManager.showWinScreen(
+          this.playerState, this.levelId, cardId,
+          () => this._restart(),
+          () => this._goToMenu(),
+          hasNextLevel ? () => this._goToNextLevel(nextLevelId) : null
+        );
+      });
+    }
+  }
+
+  /** Navigate to next level — saves state and starts next level directly. */
+  _goToNextLevel(nextLevelId) {
+    // Unlock the next level in progression state
+    if (GW.progression && GW.LEVELS[nextLevelId]) {
+      if (!GW.progression.isLevelUnlocked(nextLevelId)) {
+        // Force-unlock by treating it as completed through progression
+        GW.LEVELS[nextLevelId].unlocked = true;
+      }
+      GW.progression.save();
+    }
+    // Destroy current scene objects
+    this.combatManager.destroyAll();
+    this.sentinelMgr.destroyAll();
+    if (this.currencyManager) this.currencyManager.destroyAll();
+    // Navigate — use BootScene transition to properly init the next level
+    window.location.href = "game.html?level=" + nextLevelId;
+  }
+
+  _triggerLose() {
+    if (this._gameOver || this._gameWon) return;
+    this._gameOver = true;
+    this.resourceManager.stopRegen();
+    this.cameras.main.shake(380, 0.012);
+    this.uiManager.showBanner('BASE BREACHED!', GW.UI_COLORS.TEXT_DANGER, 900);
+    this.time.delayedCall(1000, () => {
+      this.uiManager.showLoseScreen(() => this._restart(), () => this._goToMenu());
+    });
+  }
+
+  _restart() {
+    this.combatManager.destroyAll();
+    this.sentinelMgr.destroyAll();
+    if (this.currencyManager) this.currencyManager.destroyAll();
+    this.scene.restart({ levelId: this.levelId });
+  }
+
+  _goToMenu() {
+    this.combatManager.destroyAll();
+    this.sentinelMgr.destroyAll();
+    if (this.currencyManager) this.currencyManager.destroyAll();
+    window.location.href = 'index.html';
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  GAME LOOP — Single authoritative update
+  // ══════════════════════════════════════════════════════════
+  update(time, delta) {
+    if (this._gameOver || this._gameWon) return;
+    if (this._paused || this.uiManager.isPaused) return;
+
+    this.waveManager.update(delta);
+    this.combatManager.update(delta);
+    if (this.sentinelMgr) this.sentinelMgr.update(this.combatManager.enemies);
+    if (this.currencyManager) this.currencyManager.update();
+    this.uiManager.updateCooldowns(delta);
+    this._updateEnvironmentAnimation(delta);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  //  EMERGENCY FALLBACK — shown when create() throws
+  //  Ensures the player is never stuck on the green screen
+  // ══════════════════════════════════════════════════════════
+  // ── Static helper: flag count by environment + level ──
+  static _getFlagCount(envId, levelId) {
+    switch (envId) {
+      case 'daytime':
+        // L1-5:  1 flag (single final red flag only)
+        // L6-10: 2 flags (initial horde flag + final red flag)
+        if (!levelId) return 1;
+        return levelId <= 5 ? 1 : 2;
+      case 'nighttime':    return 2;
+      case 'foggy':        return (levelId && (levelId % 10) >= 6) ? 3 : (levelId && (levelId % 10) >= 1 && (levelId % 10) <= 5) ? 2 : 3;
+      case 'rainy_stormy': return 4;
+      case 'radioactive':  return 5;
+      default:             return 1;
+    }
+  }
+
+  _emergencyFallback(err) {
+    const W = GW.DISPLAY ? GW.DISPLAY.BASE_WIDTH  : 960;
+    const H = GW.DISPLAY ? GW.DISPLAY.BASE_HEIGHT : 600;
+
+    // Draw a basic dark overlay so it's not a mystery green
+    const bg = this.add.graphics().setDepth(999);
+    bg.fillStyle(0x0a1a08, 1);
+    bg.fillRect(0, 0, W, H);
+
+    this.add.text(W / 2, H / 2 - 30, 'INITIALIZATION ERROR', {
+      fontFamily: '"Exo 2", monospace', fontSize: '20px', fontStyle: 'bold',
+      color: '#ef4444', stroke: '#000', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(1000);
+
+    this.add.text(W / 2, H / 2 + 10, (err && err.message) ? err.message : 'Unknown error', {
+      fontFamily: '"Exo 2", monospace', fontSize: '11px',
+      color: '#9ca3af', wordWrap: { width: 600 },
+    }).setOrigin(0.5).setDepth(1000);
+
+    this.add.text(W / 2, H / 2 + 60, 'Press F5 to reload  |  Check browser console for details', {
+      fontFamily: '"Exo 2", monospace', fontSize: '10px', color: '#6b7280',
+    }).setOrigin(0.5).setDepth(1000);
+
+    // Allow returning to menu
+    const menuBtn = this.add.text(W / 2, H / 2 + 100, '[ RETURN TO MENU ]', {
+      fontFamily: '"Exo 2", monospace', fontSize: '13px', fontStyle: 'bold',
+      color: '#4ade80', stroke: '#000', strokeThickness: 2,
+    }).setOrigin(0.5).setDepth(1000).setInteractive({ useHandCursor: true });
+    menuBtn.on('pointerdown', () => { window.location.href = 'index.html'; });
+    menuBtn.on('pointerover', () => menuBtn.setColor('#86efac'));
+    menuBtn.on('pointerout',  () => menuBtn.setColor('#4ade80'));
+  }
+};

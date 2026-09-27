@@ -1,0 +1,130 @@
+﻿/* ============================================================
+   Chrono-Front: Galactic War — Game Page Styles
+   ============================================================ */
+
+body.game-page {
+  background: #04060f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Phaser injects <canvas> into this container */
+#game-container {
+  position: relative;
+  z-index: 1;
+  /* Phaser handles its own sizing — we just need this present */
+}
+
+#game-container canvas {
+  display: block;
+  /* Prevent any unwanted margin/gap under canvas */
+  vertical-align: bottom;
+  /* Touch-action: none stops browser panning/zooming on canvas touch */
+  touch-action: none;
+}
+
+/* ── Loading Screen ──────────────────────────────────────── */
+#load-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  /* Animated military-alien war background */
+  background:
+    radial-gradient(ellipse at 20% 80%, rgba(34,211,238,0.18) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(245,158,11,0.18) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%, rgba(239,68,68,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 40%, #060d1a 0%, #020408 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.6s ease;
+  overflow: hidden;
+}
+
+/* Animated scanlines — retro tactical feel */
+#load-screen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0,0,0,0.06) 3px,
+    rgba(0,0,0,0.06) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Floating orb animations — enemy plasma balls */
+#load-screen::after {
+  content: '';
+  position: absolute;
+  width: 600px; height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34,211,238,0.12) 0%, transparent 70%);
+  top: -200px; right: -200px;
+  animation: loadOrbFloat 8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes loadOrbFloat {
+  0%   { transform: translate(0,0) scale(1); opacity: 0.6; }
+  100% { transform: translate(-60px,40px) scale(1.2); opacity: 1; }
+}
+
+.load-inner { position: relative; z-index: 1; }
+
+#load-screen.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#load-screen.gone { display: none; }
+
+.load-inner {
+  text-align: center;
+  padding: 40px 24px;
+  max-width: 480px;
+  width: 100%;
+}
+
+.load-title {
+  font-family: 'Cinzel Decorative', 'Exo 2', serif;
+  font-size: clamp(1.2rem, 5vw, 2rem);
+  color: #22d3ee;
+  letter-spacing: 0.08em;
+  margin-bottom: 28px;
+  text-shadow: 0 0 16px rgba(74,222,128,0.5);
+}
+
+.load-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: rgba(34,211,238,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(34,211,238,0.2);
+  margin-bottom: 14px;
+}
+
+.load-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #0891b2, #22d3ee);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px rgba(34,211,238,0.5);
+}
+
+.load-status {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.85rem;
+  color: #6b85a0;
+  letter-spacing: 0.06em;
+}
