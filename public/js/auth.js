@@ -1,325 +1,696 @@
 /**
- * Chrono-Front: Galactic War — Client-side Auth
+ * ============================================================
+ * CHRONO-FRONT: GALACTIC WAR
+ * Authentication System
+ * File: ./public/js/auth.js
+ * ============================================================
  *
- * REGISTRATION FLOW
- * ─────────────────
- * 1. Client-side validation (email, password ≥ 8 chars, commander name 3-24 chars,
- *    passwords match).
- * 2. POST /api/auth/register  { email, password, commanderName }
- *    → Server forwards to Apps Script → Apps Script hashes password, writes row.
- *    → Server returns 201 ONLY after Apps Script confirms success:true.
- * 3. Store token + user in localStorage → redirect to index.html.
+ * FEATURES:
+ * - Login
+ * - Registration
+ * - Client-side validation
+ * - Password strength indicator
+ * - Session persistence
+ * - Authentication verification
+ * - Error handling
  *
- * LOGIN FLOW
- * ──────────
- * 1. POST /api/auth/login  { email, password }
- *    → Server forwards to Apps Script → Apps Script re-hashes, compares.
- * 2. Store token + user → redirect to index.html.
+ * BACKEND:
+ * POST /api/auth/register
+ * POST /api/auth/login
+ * POST /api/auth/verify
  *
- * SESSION CHECK
- * ─────────────
- * POST /api/auth/verify  { token }
- * Success → skip auth page.  Failure → clear session, show form.
- *
- * TOKEN STORAGE
- * ─────────────
- * localStorage key 'gw_session_token'  — HMAC-signed server token
- * localStorage key 'gw_user'           — { email, commanderName }
- * localStorage key 'gw_id_token'       — alias kept for auth guards in
- *                                         index.html / game.html
+ * IMPORTANT:
+ * Configure API_BASE with your deployed Express backend URL.
  */
 
-'use strict';
+"use strict";
 
-(function () {
+(() => {
+  /* ==========================================================
+     CONFIGURATION
+  ========================================================== */
 
-  /* ── Constants ─────────────────────────────────────────── */
-  const TOKEN_KEY    = 'gw_session_token';
-  const USER_KEY     = 'gw_user';
-  const REDIRECT_URL = 'index.html';
+  const TOKEN_KEY = "gw_session_token";
+  const LEGACY_TOKEN_KEY = "gw_id_token";
+  const USER_KEY = "gw_user";
 
-  // Express always runs on port 3000.
-  // When served via Live Server (5500/5501) or file://, use absolute URL.
-  const EXPRESS_PORT = 3000;
-  const API_BASE = (
-    window.location.port === String(EXPRESS_PORT) ||
-    window.location.protocol === 'https:'
-  ) ? '' : `http://localhost:${EXPRESS_PORT}`;
+  const REDIRECT_URL = "./index.html";
 
-  /* ── DOM refs ──────────────────────────────────────────── */
-  let tabLogin, tabRegister, sectionLogin, sectionRegister;
-  let formLogin,    loginEmail,   loginPassword,  loginStatus,  loginBtn;
-  let formRegister, regUsername,  regEmail,       regPassword,  regConfirm;
-  let regStrengthBar, regStatus,  regBtn;
+  /*
+   * IMPORTANT:
+   *
+   * Replace this with your actual deployed Express backend URL.
+   *
+   * Example:
+   * const API_BASE = "https://your-backend.onrender.com";
+   *
+   * Do not use localhost for a publicly deployed website.
+   */
 
-  /* ══════════════════════════════════════════════════════════
-     SAFE FETCH — never throws; always returns { ok, status, data, networkError }
-  ══════════════════════════════════════════════════════════ */
-  async function safePost(url, body) {
-    try {
-      const resp = await fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
-      let data = {};
-      try {
-        const text = await resp.text();
-        if (text.trim()) data = JSON.parse(text);
-      } catch { /* non-JSON body — leave data as {} */ }
-      return { ok: resp.ok, status: resp.status, data };
-    } catch (e) {
-      return { ok: false, status: 0, data: {}, networkError: e.message };
-    }
-  }
+  const API_BASE = "https://jvnbasicitsolutionbusiness-create.github.io/Chrono-Front-Galactic-Warfare/auth.html";
 
-  /* ══════════════════════════════════════════════════════════
-     ENTRY POINT
-  ══════════════════════════════════════════════════════════ */
-  document.addEventListener('DOMContentLoaded', init);
+  const API_TIMEOUT = 20000;
 
-  async function init() {
-    bindDomRefs();
+  /* ==========================================================
+     DOM ELEMENTS
+  ========================================================== */
+
+  const $ = (id) => document.getElementById(id);
+
+  const elements = {
+    tabLogin: $("tabLogin"),
+    tabRegister: $("tabRegister"),
+
+    sectionLogin: $("sectionLogin"),
+    sectionRegister: $("sectionRegister"),
+
+    formLogin: $("formLogin"),
+    formRegister: $("formRegister"),
+
+    loginEmail: $("loginEmail"),
+    loginPassword: $("loginPassword"),
+    loginStatus: $("loginStatus"),
+    loginBtn: $("loginBtn"),
+
+    regUsername: $("regUsername"),
+    regEmail: $("regEmail"),
+    regPassword: $("regPassword"),
+    regConfirm: $("regConfirm"),
+    regStrengthBar: $("regStrengthBar"),
+    regStatus: $("regStatus"),
+    regBtn: $("regBtn")
+  };
+
+  /* ==========================================================
+     INITIALIZATION
+  ========================================================== */
+
+  document.addEventListener("DOMContentLoaded", initialize);
+
+  async function initialize() {
     bindTabs();
     bindForms();
+    bindPasswordStrength();
 
-    // Deep-link: auth.html?tab=register
-    if (new URLSearchParams(window.location.search).get('tab') === 'register') {
-      switchTab('register');
+    switchTab("login");
+
+    const token =
+      localStorage.getItem(TOKEN_KEY) ||
+      localStorage.getItem(LEGACY_TOKEN_KEY);
+
+    if (!token) return;
+
+    const verified = await verifyToken(token);
+
+    if (verified) {
+      window.location.replace(REDIRECT_URL);
+      return;
     }
 
-    // Already logged in → skip to game
-    const saved = localStorage.getItem(TOKEN_KEY);
-    if (saved) {
-      const ok = await verifyTokenQuiet(saved);
-      if (ok) { window.location.replace(REDIRECT_URL); return; }
-      clearSession();
-    }
+    clearSession();
   }
 
-  /* ══════════════════════════════════════════════════════════
-     DOM BINDING
-  ══════════════════════════════════════════════════════════ */
-  function bindDomRefs() {
-    tabLogin        = document.getElementById('tabLogin');
-    tabRegister     = document.getElementById('tabRegister');
-    sectionLogin    = document.getElementById('sectionLogin');
-    sectionRegister = document.getElementById('sectionRegister');
-
-    formLogin     = document.getElementById('formLogin');
-    loginEmail    = document.getElementById('loginEmail');
-    loginPassword = document.getElementById('loginPassword');
-    loginStatus   = document.getElementById('loginStatus');
-    loginBtn      = document.getElementById('loginBtn');
-
-    formRegister   = document.getElementById('formRegister');
-    regUsername    = document.getElementById('regUsername');   // Commander Name input
-    regEmail       = document.getElementById('regEmail');
-    regPassword    = document.getElementById('regPassword');
-    regConfirm     = document.getElementById('regConfirm');
-    regStrengthBar = document.getElementById('regStrengthBar');
-    regStatus      = document.getElementById('regStatus');
-    regBtn         = document.getElementById('regBtn');
-  }
+  /* ==========================================================
+     TAB SWITCHING
+  ========================================================== */
 
   function bindTabs() {
-    tabLogin?.addEventListener('click',    () => switchTab('login'));
-    tabRegister?.addEventListener('click', () => switchTab('register'));
+    elements.tabLogin?.addEventListener("click", () => {
+      switchTab("login");
+    });
+
+    elements.tabRegister?.addEventListener("click", () => {
+      switchTab("register");
+    });
+
+    $("linkToRegister")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      switchTab("register");
+    });
+
+    $("linkToLogin")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      switchTab("login");
+    });
   }
 
   function switchTab(tab) {
-    const isLogin = (tab === 'login');
-    tabLogin?.classList.toggle('active',  isLogin);
-    tabRegister?.classList.toggle('active', !isLogin);
-    sectionLogin?.classList.toggle('active',  isLogin);
-    sectionRegister?.classList.toggle('active', !isLogin);
-    clearStatus(loginStatus);
-    clearStatus(regStatus);
+    const isLogin = tab === "login";
+
+    elements.tabLogin?.classList.toggle("active", isLogin);
+    elements.tabRegister?.classList.toggle("active", !isLogin);
+
+    elements.tabLogin?.setAttribute(
+      "aria-selected",
+      String(isLogin)
+    );
+
+    elements.tabRegister?.setAttribute(
+      "aria-selected",
+      String(!isLogin)
+    );
+
+    elements.sectionLogin?.classList.toggle("active", isLogin);
+    elements.sectionRegister?.classList.toggle("active", !isLogin);
+
+    if (elements.sectionLogin) {
+      elements.sectionLogin.hidden = !isLogin;
+    }
+
+    if (elements.sectionRegister) {
+      elements.sectionRegister.hidden = isLogin;
+    }
+
+    clearStatus(elements.loginStatus);
+    clearStatus(elements.regStatus);
   }
+
+  /* ==========================================================
+     FORM EVENTS
+  ========================================================== */
 
   function bindForms() {
-    regPassword?.addEventListener('input', () => updateStrength(regPassword.value));
-    formLogin?.addEventListener('submit',    async e => { e.preventDefault(); await handleLogin(); });
-    formRegister?.addEventListener('submit', async e => { e.preventDefault(); await handleRegister(); });
+    elements.formLogin?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await handleLogin();
+    });
+
+    elements.formRegister?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await handleRegister();
+    });
   }
 
-  /* ══════════════════════════════════════════════════════════
+  /* ==========================================================
+     PASSWORD STRENGTH
+  ========================================================== */
+
+  function bindPasswordStrength() {
+    elements.regPassword?.addEventListener("input", () => {
+      updatePasswordStrength(elements.regPassword.value);
+    });
+  }
+
+  function updatePasswordStrength(password) {
+    const bar = elements.regStrengthBar;
+
+    if (!bar) return;
+
+    let score = 0;
+
+    if (password.length >= 8) score++;
+    if (password.length >= 12) score++;
+    if (/[A-Z]/.test(password)) score++;
+    if (/[0-9]/.test(password)) score++;
+    if (/[^A-Za-z0-9]/.test(password)) score++;
+
+    const colors = [
+      "#ef4444",
+      "#f97316",
+      "#eab308",
+      "#22d3ee",
+      "#4ade80"
+    ];
+
+    bar.style.width = `${(score / 5) * 100}%`;
+
+    bar.style.background =
+      score > 0 ? colors[score - 1] : "transparent";
+  }
+
+  /* ==========================================================
+     API REQUEST
+  ========================================================== */
+
+  async function apiPost(endpoint, payload) {
+    if (
+      !API_BASE ||
+      API_BASE.includes("YOUR-BACKEND-DOMAIN")
+    ) {
+      return {
+        ok: false,
+        status: 0,
+        data: {
+          message:
+            "Backend URL is not configured. Update API_BASE in auth.js."
+        }
+      };
+    }
+
+    const controller = new AbortController();
+
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, API_TIMEOUT);
+
+    try {
+      const response = await fetch(
+        `${API_BASE.replace(/\/+$/, "")}${endpoint}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          credentials: "omit",
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        }
+      );
+
+      const text = await response.text();
+
+      let data = {};
+
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = {
+          message: "The server returned an invalid response."
+        };
+      }
+
+      return {
+        ok: response.ok,
+        status: response.status,
+        data
+      };
+
+    } catch (error) {
+      const message =
+        error.name === "AbortError"
+          ? "The server took too long to respond. Please try again."
+          : "Cannot connect to the authentication server. Check your backend URL and server status.";
+
+      return {
+        ok: false,
+        status: 0,
+        data: { message }
+      };
+
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  /* ==========================================================
      LOGIN
-  ══════════════════════════════════════════════════════════ */
+  ========================================================== */
+
   async function handleLogin() {
-    clearStatus(loginStatus);
+    clearStatus(elements.loginStatus);
 
-    const email    = loginEmail?.value.trim()  || '';
-    const password = loginPassword?.value       || '';
+    const email =
+      elements.loginEmail?.value.trim().toLowerCase() || "";
 
-    if (!email || !password) {
-      showStatus(loginStatus, 'Please enter your email and password.', 'error');
+    const password =
+      elements.loginPassword?.value || "";
+
+    if (!isValidEmail(email)) {
+      showStatus(
+        elements.loginStatus,
+        "Please enter a valid email address.",
+        "error"
+      );
+
+      elements.loginEmail?.focus();
       return;
     }
 
-    setLoading(loginBtn, true);
+    if (!password) {
+      showStatus(
+        elements.loginStatus,
+        "Please enter your password.",
+        "error"
+      );
 
-    const { ok, status, data, networkError } =
-      await safePost(API_BASE + '/api/auth/login', { email, password });
-
-    setLoading(loginBtn, false);
-
-    if (networkError) {
-      showStatus(loginStatus, 'Cannot reach the server. Is it running?', 'error');
+      elements.loginPassword?.focus();
       return;
     }
 
-    if (status === 503) {
-      showStatus(loginStatus, 'The database is temporarily unavailable. Please try again.', 'error');
+    setLoading(elements.loginBtn, true, "AUTHENTICATING...");
+
+    const result = await apiPost("/api/auth/login", {
+      email,
+      password
+    });
+
+    setLoading(
+      elements.loginBtn,
+      false,
+      "DEPLOY TO BASE"
+    );
+
+    if (!isSuccessful(result)) {
+      showStatus(
+        elements.loginStatus,
+        getErrorMessage(result, "Login failed."),
+        "error"
+      );
+
       return;
     }
 
-    if (!ok) {
-      showStatus(loginStatus, data.error || 'Incorrect email or password.', 'error');
+    const data = result.data;
+
+    if (!data.token) {
+      showStatus(
+        elements.loginStatus,
+        "Login response did not contain a session token.",
+        "error"
+      );
+
       return;
     }
 
-    // Server returns { ok, email, commanderName, token, progress }
-    const commanderName = data.commanderName || data.username || email.split('@')[0];
-    persistSession(data.token, { email: data.email || email, commanderName });
+    const commanderName =
+      data.commanderName ||
+      data.username ||
+      email.split("@")[0];
 
-    showStatus(loginStatus, `Welcome back, ${commanderName}. Establishing uplink…`, 'success');
-    setTimeout(() => window.location.replace(REDIRECT_URL), 800);
+    persistSession(data.token, {
+      email: data.email || email,
+      commanderName
+    });
+
+    showStatus(
+      elements.loginStatus,
+      `Welcome back, ${commanderName}! Establishing uplink...`,
+      "success"
+    );
+
+    setTimeout(() => {
+      window.location.replace(REDIRECT_URL);
+    }, 900);
   }
 
-  /* ══════════════════════════════════════════════════════════
-     REGISTER
-  ══════════════════════════════════════════════════════════ */
+  /* ==========================================================
+     REGISTRATION
+  ========================================================== */
+
   async function handleRegister() {
-    clearStatus(regStatus);
+    clearStatus(elements.regStatus);
 
-    // The "Commander Name" input is bound to regUsername DOM element
-    const commanderName = regUsername?.value.trim() || '';
-    const email         = regEmail?.value.trim()    || '';
-    const password      = regPassword?.value         || '';
-    const confirm       = regConfirm?.value           || '';
+    const commanderName =
+      elements.regUsername?.value.trim() || "";
 
-    /* ── Client-side validation ─────────────────────────── */
-    if (!commanderName || commanderName.length < 3 || commanderName.length > 24) {
-      showStatus(regStatus, 'Commander name must be 3–24 characters.', 'error');
-      regUsername?.focus(); return;
+    const email =
+      elements.regEmail?.value.trim().toLowerCase() || "";
+
+    const password =
+      elements.regPassword?.value || "";
+
+    const confirmPassword =
+      elements.regConfirm?.value || "";
+
+    /* --------------------------------------------------------
+       VALIDATION
+    -------------------------------------------------------- */
+
+    if (
+      commanderName.length < 3 ||
+      commanderName.length > 24
+    ) {
+      showStatus(
+        elements.regStatus,
+        "Commander name must be between 3 and 24 characters.",
+        "error"
+      );
+
+      elements.regUsername?.focus();
+      return;
     }
+
     if (!/^[a-zA-Z0-9_\- ]+$/.test(commanderName)) {
-      showStatus(regStatus, 'Commander name: letters, numbers, spaces, _ or - only.', 'error');
-      regUsername?.focus(); return;
+      showStatus(
+        elements.regStatus,
+        "Commander name can only contain letters, numbers, spaces, underscores, and hyphens.",
+        "error"
+      );
+
+      elements.regUsername?.focus();
+      return;
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showStatus(regStatus, 'Please enter a valid email address.', 'error');
-      regEmail?.focus(); return;
+
+    if (!isValidEmail(email)) {
+      showStatus(
+        elements.regStatus,
+        "Please enter a valid email address.",
+        "error"
+      );
+
+      elements.regEmail?.focus();
+      return;
     }
+
     if (password.length < 8) {
-      showStatus(regStatus, 'Password must be at least 8 characters.', 'error');
-      regPassword?.focus(); return;
-    }
-    if (password !== confirm) {
-      showStatus(regStatus, 'Passwords do not match.', 'error');
-      regConfirm?.focus(); return;
-    }
+      showStatus(
+        elements.regStatus,
+        "Password must contain at least 8 characters.",
+        "error"
+      );
 
-    setLoading(regBtn, true);
-
-    // Send commanderName — server/auth.js accepts both 'commanderName' and 'username'
-    const { ok, status, data, networkError } =
-      await safePost(API_BASE + '/api/auth/register', { email, password, commanderName });
-
-    setLoading(regBtn, false);
-
-    if (networkError) {
-      showStatus(regStatus, 'Cannot reach the server. Is it running?', 'error');
+      elements.regPassword?.focus();
       return;
     }
 
-    if (status === 503) {
-      showStatus(regStatus, 'The database is temporarily unavailable. Please try again in a moment.', 'error');
+    if (password.length > 128) {
+      showStatus(
+        elements.regStatus,
+        "Password cannot exceed 128 characters.",
+        "error"
+      );
+
+      elements.regPassword?.focus();
       return;
     }
 
-    if (status === 409) {
-      showStatus(regStatus, 'An account with that email already exists.', 'error');
+    if (password !== confirmPassword) {
+      showStatus(
+        elements.regStatus,
+        "Passwords do not match.",
+        "error"
+      );
+
+      elements.regConfirm?.focus();
       return;
     }
 
-    if (!ok) {
-      // Show the exact error from the server / Apps Script (e.g. validation messages)
-      showStatus(regStatus, data.error || 'Registration failed. Please try again.', 'error');
+    /* --------------------------------------------------------
+       SEND REGISTRATION REQUEST
+    -------------------------------------------------------- */
+
+    setLoading(
+      elements.regBtn,
+      true,
+      "CREATING ACCOUNT..."
+    );
+
+    const result = await apiPost("/api/auth/register", {
+      email,
+      password,
+      commanderName
+    });
+
+    setLoading(
+      elements.regBtn,
+      false,
+      "CREATE ACCOUNT"
+    );
+
+    /* --------------------------------------------------------
+       HANDLE ERRORS
+    -------------------------------------------------------- */
+
+    if (!isSuccessful(result)) {
+      showStatus(
+        elements.regStatus,
+        getErrorMessage(result, "Registration failed."),
+        "error"
+      );
+
+      console.error("Registration failed:", {
+        status: result.status,
+        response: result.data
+      });
+
       return;
     }
 
-    // Registration confirmed by Sheets — persist session and redirect
-    const resolvedName = data.commanderName || commanderName;
-    persistSession(data.token, { email: data.email || email, commanderName: resolvedName });
+    /* --------------------------------------------------------
+       STORE SESSION
+    -------------------------------------------------------- */
 
-    showStatus(regStatus, `Account created, ${resolvedName}! Deploying you to the frontline…`, 'success');
-    setTimeout(() => window.location.replace(REDIRECT_URL), 900);
+    const data = result.data;
+
+    if (!data.token) {
+      showStatus(
+        elements.regStatus,
+        "Your account may have been created, but the server did not return a session token. Please try logging in.",
+        "error"
+      );
+
+      return;
+    }
+
+    const resolvedName =
+      data.commanderName || commanderName;
+
+    persistSession(data.token, {
+      email: data.email || email,
+      commanderName: resolvedName
+    });
+
+    showStatus(
+      elements.regStatus,
+      `Account created successfully, ${resolvedName}! Deploying...`,
+      "success"
+    );
+
+    setTimeout(() => {
+      window.location.replace(REDIRECT_URL);
+    }, 1000);
   }
 
-  /* ══════════════════════════════════════════════════════════
-     SESSION HELPERS
-  ══════════════════════════════════════════════════════════ */
+  /* ==========================================================
+     RESPONSE VALIDATION
+  ========================================================== */
+
+  function isSuccessful(result) {
+    if (!result || !result.ok) {
+      return false;
+    }
+
+    const data = result.data || {};
+
+    if (data.success === false || data.ok === false) {
+      return false;
+    }
+
+    return data.success === true || data.ok === true;
+  }
+
+  function getErrorMessage(result, fallback) {
+    const data = result?.data || {};
+
+    if (data.message) return data.message;
+    if (data.error) return data.error;
+
+    if (result?.status === 409) {
+      return "An account with this email already exists.";
+    }
+
+    if (result?.status === 503) {
+      return "The database is temporarily unavailable. Please try again.";
+    }
+
+    if (result?.status === 0) {
+      return "Cannot reach the authentication server. Check your backend URL and server status.";
+    }
+
+    if (result?.status) {
+      return `${fallback} HTTP ${result.status}.`;
+    }
+
+    return fallback;
+  }
+
+  /* ==========================================================
+     SESSION MANAGEMENT
+  ========================================================== */
+
   function persistSession(token, user) {
-    localStorage.setItem(TOKEN_KEY,      token || '');
-    localStorage.setItem('gw_id_token',  token || '');   // auth-guard alias
-    localStorage.setItem(USER_KEY,       JSON.stringify(user));
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(LEGACY_TOKEN_KEY, token);
+
+    localStorage.setItem(
+      USER_KEY,
+      JSON.stringify(user)
+    );
   }
 
   function clearSession() {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem('gw_id_token');
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }
 
-  async function verifyTokenQuiet(token) {
-    const { ok, data } = await safePost(API_BASE + '/api/auth/verify', { token });
-    if (ok && data.ok) {
-      // Refresh stored user so commanderName is always up-to-date
-      const stored = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
-      if (data.commanderName) stored.commanderName = data.commanderName;
-      if (data.username)      stored.commanderName = stored.commanderName || data.username;
-      localStorage.setItem(USER_KEY, JSON.stringify(stored));
+  async function verifyToken(token) {
+    const result = await apiPost(
+      "/api/auth/verify",
+      { token }
+    );
+
+    if (!isSuccessful(result)) {
+      return false;
     }
-    return !!(ok && data.ok);
+
+    const data = result.data;
+
+    try {
+      const user = JSON.parse(
+        localStorage.getItem(USER_KEY) || "{}"
+      );
+
+      if (data.commanderName) {
+        user.commanderName = data.commanderName;
+      }
+
+      if (data.email) {
+        user.email = data.email;
+      }
+
+      localStorage.setItem(
+        USER_KEY,
+        JSON.stringify(user)
+      );
+
+    } catch (error) {
+      console.error("Could not refresh session user:", error);
+    }
+
+    return true;
   }
 
-  /* ══════════════════════════════════════════════════════════
-     PASSWORD STRENGTH INDICATOR
-  ══════════════════════════════════════════════════════════ */
-  function updateStrength(pw) {
-    if (!regStrengthBar) return;
-    let score = 0;
-    if (pw.length >= 8)            score++;
-    if (pw.length >= 12)           score++;
-    if (/[A-Z]/.test(pw))          score++;
-    if (/[0-9]/.test(pw))          score++;
-    if (/[^A-Za-z0-9]/.test(pw))   score++;
-    const colors = ['#ef4444', '#f97316', '#eab308', '#22d3ee', '#4ade80'];
-    regStrengthBar.style.width      = `${(score / 5) * 100}%`;
-    regStrengthBar.style.background = colors[Math.max(0, score - 1)] || '#ef4444';
-  }
-
-  /* ══════════════════════════════════════════════════════════
+  /* ==========================================================
      UI HELPERS
-  ══════════════════════════════════════════════════════════ */
-  function setLoading(btn, loading) {
-    if (!btn) return;
-    btn.disabled = loading;
-    btn.classList.toggle('loading', loading);
+  ========================================================== */
+
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
 
-  function showStatus(el, msg, type) {
-    if (!el) return;
-    el.textContent = msg;
-    el.className   = 'auth-status visible ' + (type || 'error');
+  function setLoading(button, loading, label) {
+    if (!button) return;
+
+    if (loading) {
+      button.dataset.originalText = button.textContent.trim();
+    }
+
+    button.disabled = loading;
+    button.classList.toggle("loading", loading);
+
+    if (label) {
+      button.textContent = label;
+    } else if (!loading && button.dataset.originalText) {
+      button.textContent = button.dataset.originalText;
+    }
   }
 
-  function clearStatus(el) {
-    if (!el) return;
-    el.textContent = '';
-    el.className   = 'auth-status';
+  function showStatus(element, message, type = "error") {
+    if (!element) return;
+
+    element.textContent = message;
+
+    element.className =
+      `auth-status visible ${type}`;
+  }
+
+  function clearStatus(element) {
+    if (!element) return;
+
+    element.textContent = "";
+    element.className = "auth-status";
   }
 
 })();
