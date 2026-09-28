@@ -35,7 +35,7 @@
   // IMPORTANT:
   // Use your deployed Express backend's ROOT URL.
   // Do not include /api/auth here.
-  const API_BASE = "https://YOUR-BACKEND-URL";
+  const API_BASE = "https://galactic-warfare-backend.onrender.com/";
 
   const API_TIMEOUT = 20000;
 
