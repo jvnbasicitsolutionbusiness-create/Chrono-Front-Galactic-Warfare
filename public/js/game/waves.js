@@ -3,9 +3,8 @@
  *
  * Spawn modes:
  *  1. Normal (default)    — each enemy entry has a `delay` ms offset from wave start.
- *  2. halfHpChain:true    — next scout spawns when the previous one reaches ≤50% HP.
- *  3. hordeDelay:N        — flag bearer spawns immediately (triggers warning banner),
- *                           then ALL remaining enemies spawn together after N ms.
+ *  2. halfHpChain:true    — first scouts are health-gated; later entries arrive in paced groups.
+ *  3. isHorde:true        — flag bearer leads, followed by paced single/pair/triple arrivals.
  */
 
 /* global GW */
@@ -26,6 +25,9 @@ GW.WaveManager = class WaveManager {
     this._spawnTimers    = [];
     this._spawnedCount   = 0;
     this._totalInWave    = 0;
+    this._spawnedEntryIndexes = [];
+    this._hordeReleaseScheduled = false;
+    this._hordeReleaseTimer = null;
 
     // Half-HP chain state
     this._chainIndex     = 0;        // next entry index to spawn in halfHpChain mode
@@ -44,6 +46,7 @@ GW.WaveManager = class WaveManager {
     this.onCountdown    = null;
     this.onFlagAlien    = null;
     this.onAlienSpawned = null;
+    this.onHordeWarning = null;
   }
 
   start() {
@@ -65,6 +68,7 @@ GW.WaveManager = class WaveManager {
     }
 
     if (this.state === 'between') {
+      if (this._hordeReleaseScheduled) return;
       this.betweenTimer -= delta;
       if (this.onCountdown) this.onCountdown(Math.max(0, Math.ceil(this.betweenTimer / 1000)));
       if (this.betweenTimer <= 0) this._beginWave(this.currentWaveIndex + 1);
@@ -87,6 +91,7 @@ GW.WaveManager = class WaveManager {
     }
 
     this.currentWaveIndex = index;
+    this._hordeReleaseScheduled = false;
     const waveDef = this.waves[index];
     this.state = 'spawning';
 
@@ -96,6 +101,7 @@ GW.WaveManager = class WaveManager {
     const enemies = waveDef.enemies || [];
     this._totalInWave  = enemies.length;
     this._spawnedCount = 0;
+    this._spawnedEntryIndexes = [];
 
     this._cancelSpawnTimers();
     this._stopChainPoll();
@@ -110,19 +116,36 @@ GW.WaveManager = class WaveManager {
     // ── Dispatch to the right spawn mode ──────────────────
     if (waveDef.halfHpChain) {
       this._beginHalfHpChain(enemies, waveDef);
-    } else if (waveDef.hordeDelay) {
+    } else if (waveDef.isHorde || waveDef.hordeDelay) {
       this._beginHordeWave(enemies, waveDef);
     } else {
       this._beginNormalWave(enemies, waveDef);
     }
   }
 
+  _notifyHordeAfterSpawn() {
+    if (this._hordeReleaseScheduled || this._spawnedCount < this._totalInWave) return;
+    const nextIndex = this.currentWaveIndex + 1;
+    const nextWave = this.waves[nextIndex];
+    if (!nextWave || !nextWave.isHorde) return;
+
+    this._hordeReleaseScheduled = true;
+    if (this.onHordeWarning) this.onHordeWarning(nextWave);
+    this._hordeReleaseTimer = this.scene.time.delayedCall(nextWave.warningDelay || 3000, () => {
+      this._hordeReleaseScheduled = false;
+      this._hordeReleaseTimer = null;
+      this._beginWave(nextIndex);
+    });
+  }
+
   // ── MODE 1: Normal delay-based spawning ──────────────────
   _beginNormalWave(enemies, waveDef) {
-    enemies.forEach(entry => {
+    enemies.forEach((entry, index) => {
       const timer = this.scene.time.delayedCall(entry.delay || 0, () => {
         this._spawnEnemy(entry, waveDef);
         this._spawnedCount++;
+        this._spawnedEntryIndexes.push(index);
+        this._notifyHordeAfterSpawn();
         if (this._spawnedCount >= this._totalInWave) {
           this.scene.time.delayedCall(500, () => {
             if (this.state === 'spawning') this.state = 'clearing';
@@ -134,44 +157,88 @@ GW.WaveManager = class WaveManager {
   }
 
   // ── MODE 2: Half-HP chain (scouts) ───────────────────────
-  // Spawn first entry immediately. After each spawn, wait until
-  // that alien reaches ≤50% HP, then spawn the next one.
+  // v1.0.1 rule:
+  //   First 5 entries  → wait for previous alien to reach ≤ 50% HP before spawning next.
+  //   Entries 6+       → spawn freely on a randomised 8–12 s interval.
   _beginHalfHpChain(enemies, waveDef) {
-    this._chainIndex = 0;
-    this._chainEnemy = null;
+    this._chainIndex      = 0;
+    this._chainEnemy      = null;
+    this._chainFreeCount  = 0;   // how many free-interval spawns have started
     this._spawnNextInChain(enemies, waveDef);
   }
 
   _spawnNextInChain(enemies, waveDef) {
     if (this._chainIndex >= enemies.length) {
-      // All spawned — wait for field to clear
       this.scene.time.delayedCall(500, () => {
         if (this.state === 'spawning') this.state = 'clearing';
       });
       return;
     }
 
-    const entry = enemies[this._chainIndex];
+    const entryIndex = this._chainIndex;
+    const entry = enemies[entryIndex];
     this._chainIndex++;
 
-    // Spawn this scout
     const enemy = this._spawnEnemy(entry, waveDef);
     this._spawnedCount++;
+    this._spawnedEntryIndexes.push(entryIndex);
+    this._notifyHordeAfterSpawn();
     this._chainEnemy = enemy;
 
-    // If more enemies remain, watch this one's HP
-    if (this._chainIndex < enemies.length) {
-      this._pollForHalfHp(enemies, waveDef);
-    } else {
-      // Last scout spawned — transition to clearing when field empties
+    if (this._chainIndex >= enemies.length) {
+      // Last enemy spawned — wait for field to clear
       this.scene.time.delayedCall(500, () => {
         if (this.state === 'spawning') this.state = 'clearing';
       });
+      return;
+    }
+
+    // Decide spawn mode for the NEXT entry
+    const spawnedSoFar = this._chainIndex; // already incremented above
+    if (spawnedSoFar < 5) {
+      // Still within the first-5 window → poll HP
+      this._pollForHalfHp(enemies, waveDef);
+    } else {
+      this._scheduleChainBatch(enemies, waveDef);
     }
   }
 
+  _scheduleChainBatch(enemies, waveDef) {
+    const arrival = this._chooseArrivalGroup(enemies.length - this._chainIndex);
+    const groupSize = arrival.size;
+    const delay = arrival.delay;
+    this._chainBatchSize = groupSize;
+    this._chainTimer = this.scene.time.delayedCall(delay, () => {
+      this._chainTimer = null;
+      const count = Math.min(this._chainBatchSize || 1, enemies.length - this._chainIndex);
+      this._chainBatchSize = 0;
+      for (let i = 0; i < count; i++) {
+        const entryIndex = this._chainIndex++;
+        this._spawnEnemy(enemies[entryIndex], waveDef);
+        this._spawnedCount++;
+        this._spawnedEntryIndexes.push(entryIndex);
+        this._notifyHordeAfterSpawn();
+      }
+      if (this._chainIndex >= enemies.length) {
+        this.scene.time.delayedCall(500, () => {
+          if (this.state === 'spawning') this.state = 'clearing';
+        });
+      } else {
+        this._scheduleChainBatch(enemies, waveDef);
+      }
+    });
+    this._spawnTimers.push(this._chainTimer);
+  }
+
+  _chooseArrivalGroup(remaining) {
+    const roll = Math.random();
+    const requestedSize = roll < 0.5 ? 1 : roll < 0.7 ? 2 : 3;
+    const size = Math.min(remaining, requestedSize);
+    const range = size === 1 ? [12000, 15000] : size === 2 ? [16000, 19000] : [14000, 18000];
+    return { size, delay: range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1)) };
+  }
+
   _pollForHalfHp(enemies, waveDef) {
-    // Poll every 200ms; fire next scout the moment current one ≤ 50% HP
     this._chainPollTimer = this.scene.time.addEvent({
       delay:    200,
       loop:     true,
@@ -181,10 +248,8 @@ GW.WaveManager = class WaveManager {
           return;
         }
         const en = this._chainEnemy;
-        // Trigger if: alien is dead (killed) OR hp ≤ 50%
         const halfHpReached = !en || !en.alive ||
           (en.hp !== undefined && en.maxHp && en.hp <= en.maxHp * 0.5);
-
         if (halfHpReached) {
           this._stopChainPoll();
           this._spawnNextInChain(enemies, waveDef);
@@ -204,28 +269,44 @@ GW.WaveManager = class WaveManager {
 
   // ── MODE 3: Horde wave with delay ───────────────────────
   // 1. Flag bearer spawns immediately → triggers onFlagAlien / warning banner.
-  // 2. After hordeDelay ms, all remaining drones spawn together.
+  // Drones follow weighted single/pair/triple delays after the flag bearer.
+   // ── MODE 3: Staged horde ────────────────────────────────
+   // The flag bearer leads; drones arrive in weighted groups with longer delays.
   _beginHordeWave(enemies, waveDef) {
-    const flagEntry  = enemies.find(e => e.type === 'vex_flag_bearer');
-    const droneEntries = enemies.filter(e => e.type !== 'vex_flag_bearer');
-
-    // Spawn flag bearer immediately
-    if (flagEntry) {
-      this._spawnEnemy(flagEntry, waveDef);
+    const flagIndex = enemies.findIndex(entry => entry.type === 'vex_flag_bearer');
+    if (flagIndex >= 0) {
+      this._spawnEnemy(enemies[flagIndex], waveDef);
       this._spawnedCount++;
+      this._spawnedEntryIndexes.push(flagIndex);
     }
+    const pending = enemies.map((entry, index) => ({ entry, index }))
+      .filter(item => item.index !== flagIndex);
+    this._scheduleHordeBatch(pending, waveDef);
+  }
 
-    // Spawn drones after the configured delay (4000ms)
-    const delay = waveDef.hordeDelay || 4000;
-    const timer = this.scene.time.delayedCall(delay, () => {
-      droneEntries.forEach(entry => {
-        this._spawnEnemy(entry, waveDef);
-        this._spawnedCount++;
-      });
-      // Transition to clearing shortly after last spawn
+  _scheduleHordeBatch(pending, waveDef) {
+    if (!pending.length) {
       this.scene.time.delayedCall(500, () => {
         if (this.state === 'spawning') this.state = 'clearing';
       });
+      return;
+    }
+    const arrival = this._chooseArrivalGroup(pending.length);
+    const timer = this.scene.time.delayedCall(arrival.delay, () => {
+      if (this.state !== 'spawning') return;
+      const batch = pending.splice(0, arrival.size);
+      batch.forEach(({ entry, index }) => {
+        this._spawnEnemy(entry, waveDef);
+        this._spawnedCount++;
+        this._spawnedEntryIndexes.push(index);
+      });
+      if (this._spawnedCount >= this._totalInWave) {
+        this.scene.time.delayedCall(500, () => {
+          if (this.state === 'spawning') this.state = 'clearing';
+        });
+      } else {
+        this._scheduleHordeBatch(pending, waveDef);
+      }
     });
     this._spawnTimers.push(timer);
   }
@@ -268,6 +349,12 @@ GW.WaveManager = class WaveManager {
       return;
     }
 
+    const nextWave = this.waves[this.currentWaveIndex + 1];
+    if (nextWave && nextWave.isHorde) {
+      this._notifyHordeAfterSpawn();
+      this.state = 'between';
+      return;
+    }
     this.betweenTimer = GW.WAVES.BETWEEN_WAVE_DELAY;
     this.state = 'between';
   }
@@ -280,4 +367,88 @@ GW.WaveManager = class WaveManager {
 
   get currentWaveNumber() { return this.currentWaveIndex + 1; }
   get isComplete()        { return this.state === 'done'; }
+
+  restoreSnapshot(saved) {
+    this.started = !!saved.started;
+    this.currentWaveIndex = saved.currentWaveIndex == null ? -1 : saved.currentWaveIndex;
+    this.state = saved.state || 'waiting';
+    this.initialTimer = saved.initialTimer;
+    this.betweenTimer = saved.betweenTimer;
+    this._totalSpawnedAllWaves = saved.totalSpawned || 0;
+    this._totalScheduledAllWaves = saved.totalScheduled || 0;
+    this._spawnedCount = saved.spawnedCount || 0;
+    this._spawnedEntryIndexes = saved.spawnedEntryIndexes || [];
+    this._chainIndex = saved.chainIndex == null
+      ? Math.max(0, ...this._spawnedEntryIndexes.map(index => index + 1))
+      : saved.chainIndex;
+    const nextIndex = this.currentWaveIndex + 1;
+    if (saved.hordeReleaseScheduled && this.waves[nextIndex] && this.waves[nextIndex].isHorde) {
+      this._hordeReleaseScheduled = true;
+      const releaseDelay = Math.max(0, saved.hordeReleaseRemaining || 0);
+      this._hordeReleaseTimer = this.scene.time.delayedCall(releaseDelay, () => {
+        this._hordeReleaseScheduled = false;
+        this._hordeReleaseTimer = null;
+        this._beginWave(nextIndex);
+      });
+    }
+
+    if (this.state !== 'spawning') return;
+    const waveDef = this.waves[this.currentWaveIndex];
+    const entries = waveDef && waveDef.enemies || [];
+    this._totalInWave = entries.length;
+    const spawned = new Set(this._spawnedEntryIndexes);
+    const pending = entries.map((entry, index) => ({ entry, index })).filter(item => !spawned.has(item.index));
+    if (!pending.length) {
+      this.state = 'clearing';
+      return;
+    }
+
+    if (waveDef.isHorde) {
+      const flagPending = pending.find(item => item.entry.type === 'vex_flag_bearer');
+      const dronesPending = pending.filter(item => item.entry.type !== 'vex_flag_bearer');
+      if (flagPending) {
+        this._scheduleRestoredBatch([flagPending], waveDef, 0);
+        this._scheduleRestoredBatch(dronesPending, waveDef);
+      } else {
+        this._scheduleRestoredBatch(dronesPending, waveDef);
+      }
+      return;
+    }
+
+    if (waveDef.halfHpChain && this._chainIndex > 0 && this._chainIndex < 5) {
+      const chainEnemy = this.combatManager.enemies[this.combatManager.enemies.length - 1];
+      if (chainEnemy) {
+        this._chainEnemy = chainEnemy;
+        this._pollForHalfHp(entries, waveDef);
+        return;
+      }
+    }
+
+    this._scheduleRestoredBatch(pending, waveDef);
+  }
+
+  _scheduleRestoredBatch(pending, waveDef, delayOverride) {
+    if (!pending.length) return;
+    const arrival = this._chooseArrivalGroup(pending.length);
+    const delay = delayOverride == null ? arrival.delay : delayOverride;
+    const timer = this.scene.time.delayedCall(delay, () => {
+      if (this.state !== 'spawning') return;
+      const batch = pending.splice(0, delayOverride === 0 ? 1 : arrival.size);
+      batch.forEach(({ entry, index }) => {
+        this._spawnEnemy(entry, waveDef);
+        this._spawnedCount++;
+        this._spawnedEntryIndexes.push(index);
+        if (waveDef.halfHpChain) this._chainIndex = Math.max(this._chainIndex, index + 1);
+        this._notifyHordeAfterSpawn();
+      });
+      if (this._spawnedCount >= this._totalInWave) {
+        this.scene.time.delayedCall(500, () => {
+          if (this.state === 'spawning') this.state = 'clearing';
+        });
+      } else {
+        this._scheduleRestoredBatch(pending, waveDef);
+      }
+    });
+    this._spawnTimers.push(timer);
+  }
 };

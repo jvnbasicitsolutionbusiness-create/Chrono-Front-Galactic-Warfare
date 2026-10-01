@@ -5,9 +5,10 @@
 /* global GW, Phaser */
 
 GW.CurrencyDrop = class CurrencyDrop {
-  constructor(scene, x, y, typeDef, onCollect) {
+  constructor(scene, x, y, typeDef, onCollect, lifetime) {
     this.scene = scene; this.x = x; this.y = y;
     this.typeDef = typeDef; this.onCollect = onCollect; this.active = true;
+    this.lifetime = lifetime || (GW.CURRENCY && GW.CURRENCY.LIFETIME) || 14000;
     this._build(); this._startLifetime();
   }
   _build() {
@@ -38,7 +39,7 @@ GW.CurrencyDrop = class CurrencyDrop {
     this.hitZone.on("pointerout",  () => this.gfxCore.setAlpha(1));
   }
   _startLifetime() {
-    const lifetime = (GW.CURRENCY && GW.CURRENCY.LIFETIME) || 14000;
+    const lifetime = this.lifetime;
     this._warnTimer = this.scene.time.delayedCall(lifetime * 0.65, () => {
       if (!this.active) return;
       this.scene.tweens.add({ targets:[this.gfxOuter,this.gfxCore,this.label], alpha:0.3, duration:250, yoyo:true, repeat:5 });
@@ -47,6 +48,7 @@ GW.CurrencyDrop = class CurrencyDrop {
   }
   _collect() {
     if (!this.active) return; this.active = false;
+    if (window.GWAudio) window.GWAudio.play('coin-collect');
     if (this._warnTimer)  this._warnTimer.remove(false);
     if (this._expireTimer) this._expireTimer.remove(false);
     const dur = (GW.CURRENCY && GW.CURRENCY.FLOAT_DURATION) || 800;
@@ -114,11 +116,11 @@ GW.CurrencyManager = class CurrencyManager {
     this._coinTargetX = CX + 35;
     this._coinTargetY = CY + 11;
   }
-  spawnDrop(x, y, typeDef) {
+  spawnDrop(x, y, typeDef, lifetime) {
     const drop = new GW.CurrencyDrop(this.scene, x, y, typeDef, (value) => {
       this.collect(value);
       const idx = this.drops.indexOf(drop); if (idx !== -1) this.drops.splice(idx, 1);
-    });
+    }, lifetime);
     this.drops.push(drop);
   }
   collect(amount) {

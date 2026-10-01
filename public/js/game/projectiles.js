@@ -123,12 +123,18 @@ GW.ProjectileManager = class ProjectileManager {
    * @param {number}   damage
    * @param {number}   [color]  - hex color (from weapon def)
    * @param {number}   [size]   - radius (from weapon def)
+   * @param {string}   [type]   - 'fire' uses GW.FireProjectile; others use default
    */
-  fire(x, y, target, damage, color, size) {
-    const p = new GW.Projectile(
-      this.scene, x, y, target, damage,
-      GW.COMBAT.PROJECTILE_SPEED, color, size
-    );
+  fire(x, y, target, damage, color, size, type) {
+    let p;
+    if (type === 'fire') {
+      p = new GW.FireProjectile(this.scene, x, y, target, damage);
+    } else {
+      p = new GW.Projectile(
+        this.scene, x, y, target, damage,
+        GW.COMBAT.PROJECTILE_SPEED, color, size
+      );
+    }
     this.projectiles.push(p);
     return p;
   }
@@ -144,5 +150,187 @@ GW.ProjectileManager = class ProjectileManager {
   destroyAll() {
     this.projectiles.forEach(p => p.destroy());
     this.projectiles = [];
+  }
+};
+
+// ─── Fire Projectile (v1.0.1) ────────────────────────────────────────────────
+// Animated 2D fire blast for Fire-Lancer units.
+// Rendered as a layered fireball with animated flame particles so it looks
+// like a literal burst of fire rather than a small solid dot.
+
+GW.FireProjectile = class FireProjectile {
+  /**
+   * @param {Phaser.Scene} scene
+   * @param {number}  x        - origin X (muzzle of fire-lance)
+   * @param {number}  y        - origin Y
+   * @param {GW.Enemy} target
+   * @param {number}  damage
+   */
+  constructor(scene, x, y, target, damage) {
+    this.scene   = scene;
+    this.x       = x;
+    this.y       = y;
+    this.target  = target;
+    this.damage  = damage;
+    this.speed   = GW.COMBAT.PROJECTILE_SPEED * 1.1;
+    this.active  = true;
+    this._age    = 0; // ms since creation — drives flicker
+
+    this._build();
+  }
+
+  _build() {
+    // Container travels as one unit
+    this.container = this.scene.add.container(this.x, this.y).setDepth(20);
+
+    // ── Outer heat shimmer (large, low opacity amber) ──────
+    this._shimmer = this.scene.add.graphics();
+    this._shimmer.fillStyle(0xff8c00, 0.18);
+    this._shimmer.fillCircle(0, 0, 18);
+    this.container.add(this._shimmer);
+
+    // ── Mid flame ring (orange) ────────────────────────────
+    this._midRing = this.scene.add.graphics();
+    this.container.add(this._midRing);
+
+    // ── Core (bright yellow-white) ─────────────────────────
+    this._core = this.scene.add.graphics();
+    this.container.add(this._core);
+
+    // ── Trailing embers: 4 small dots offset behind ────────
+    this._embers = [];
+    for (let i = 0; i < 4; i++) {
+      const e = this.scene.add.graphics();
+      this.container.add(e);
+      this._embers.push(e);
+    }
+
+    this._drawFlame(0);
+  }
+
+  _drawFlame(age) {
+    const flicker = Math.sin(age * 0.022) * 0.5 + 0.5; // 0–1 oscillation
+
+    // Mid ring — orange lobe shape, flickers in size
+    this._midRing.clear();
+    const mr = 10 + flicker * 3;
+    this._midRing.fillStyle(0xff4500, 0.85);
+    this._midRing.fillCircle(0, 0, mr);
+    // Lobe toward the front of travel (positive x = right = toward enemy)
+    this._midRing.fillStyle(0xff6a00, 0.6);
+    this._midRing.fillEllipse(mr * 0.5, 0, mr * 1.4, mr * 0.7);
+
+    // Core — yellow-white hot centre
+    this._core.clear();
+    const cr = 6 + flicker * 2;
+    this._core.fillStyle(0xfef08a, 0.95);
+    this._core.fillCircle(0, 0, cr);
+    this._core.fillStyle(0xffffff, 0.7);
+    this._core.fillCircle(-1, -1, cr * 0.45);
+
+    // Embers — trail behind the core (negative x = toward origin)
+    const emberColors = [0xff4500, 0xff6a00, 0xfbbf24, 0xfef08a];
+    this._embers.forEach((e, i) => {
+      e.clear();
+      const ox    = -(8 + i * 5) - flicker * 2;
+      const oy    = Math.sin(age * 0.015 + i * 1.4) * 4;
+      const er    = Math.max(1.5, 4 - i * 0.7);
+      const alpha = Math.max(0, 0.8 - i * 0.15);
+      e.fillStyle(emberColors[i % emberColors.length], alpha);
+      e.fillCircle(ox, oy, er);
+    });
+  }
+
+  update(delta) {
+    if (!this.active) return true;
+
+    if (!this.target || !this.target.alive) {
+      this.destroy();
+      return true;
+    }
+
+    this._age += delta;
+    this._drawFlame(this._age);
+
+    const tx   = this.target.x;
+    const ty   = this.target.y;
+    const dx   = tx - this.x;
+    const dy   = ty - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const step = (this.speed * delta) / 1000;
+
+    // Rotate container to face direction of travel
+    if (dist > 1) {
+      this.container.setRotation(Math.atan2(dy, dx));
+    }
+
+    if (dist <= step + 14) {
+      // Hit — deal damage and spawn explosion
+      if (window.GWAudio) window.GWAudio.play('fire-impact');
+      this.target.takeDamage(this.damage);
+      this._spawnImpact(tx, ty);
+      this.destroy();
+      return true;
+    }
+
+    this.x += (dx / dist) * step;
+    this.y += (dy / dist) * step;
+    this.container.x = this.x;
+    this.container.y = this.y;
+
+    // Out of bounds guard
+    if (this.x > GW.DISPLAY.BASE_WIDTH + 80 || this.x < -80) {
+      this.destroy();
+      return true;
+    }
+    return false;
+  }
+
+  _spawnImpact(x, y) {
+    const scene = this.scene;
+
+    // Outer explosion bloom
+    const bloom = scene.add.graphics().setDepth(26);
+    bloom.fillStyle(0xff4500, 0.7);
+    bloom.fillCircle(0, 0, 22);
+    bloom.x = x; bloom.y = y;
+    scene.tweens.add({
+      targets: bloom, scaleX: 2.8, scaleY: 2.8, alpha: 0,
+      duration: 280, ease: 'Power2', onComplete: () => bloom.destroy(),
+    });
+
+    // Bright core flash
+    const flash = scene.add.graphics().setDepth(27);
+    flash.fillStyle(0xfef08a, 0.9);
+    flash.fillCircle(0, 0, 12);
+    flash.x = x; flash.y = y;
+    scene.tweens.add({
+      targets: flash, scaleX: 1.8, scaleY: 1.8, alpha: 0,
+      duration: 180, ease: 'Power3', onComplete: () => flash.destroy(),
+    });
+
+    // 5 flying fire sparks
+    for (let i = 0; i < 5; i++) {
+      const spark = scene.add.graphics().setDepth(25);
+      spark.fillStyle(i % 2 === 0 ? 0xff6a00 : 0xfbbf24, 0.85);
+      spark.fillCircle(0, 0, 3);
+      spark.x = x; spark.y = y;
+      const angle  = (Math.PI * 2 / 5) * i + Math.random() * 0.5;
+      const radius = 18 + Math.random() * 20;
+      scene.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * radius,
+        y: y + Math.sin(angle) * radius,
+        alpha: 0, scaleX: 0.3, scaleY: 0.3,
+        duration: 320 + Math.random() * 120,
+        ease: 'Power1',
+        onComplete: () => spark.destroy(),
+      });
+    }
+  }
+
+  destroy() {
+    this.active = false;
+    if (this.container) { this.container.destroy(true); this.container = null; }
   }
 };

@@ -1,11 +1,11 @@
-/**
- * Chrono-Front: Galactic War — Central Game Configuration
+﻿/**
+ * Chrono-Front: Galactic War â€” Central Game Configuration
  *
  * PART 1 REVISION:
  *  - Exact 52-card military system (2 starting + 49 adventure + 1 boss = 52)
- *  - 5 canonical environments: Daytime / Nighttime / Foggy / Rainy-Stormy / Radioactive
+ *  - 5 canonical environments: Daytime / Nighttime / Flooded / Storm / Radioactive
  *  - Creator Bitos event flags (levels 5/15/25/35/45)
- *  - Every-10th digital briefing flags (10/20/30/40/50 — NO Creator Bitos)
+ *  - Every-10th digital briefing flags (10/20/30/40/50 â€” NO Creator Bitos)
  *  - 50-level reward schedule (each level 2-49 = 1 card; level 50 boss = 1 final card)
  *  - Wave timeline system config
  *  - Flag Alien definition
@@ -17,29 +17,29 @@
 /* global GW */
 window.GW = window.GW || {};
 
-// ─── Canvas / Display ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Canvas / Display â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.DISPLAY = {
   BASE_WIDTH:   960,
   BASE_HEIGHT:  600,   // taller canvas for proper sky proportions
   MIN_WIDTH:    320,
   MIN_HEIGHT:   320,
-  BACKGROUND_COLOR: '#0a1a08',   // Dark military green — visible fallback if scene fails
+  BACKGROUND_COLOR: '#0a1a08',   // Dark military green â€” visible fallback if scene fails
   PIXEL_ART:    true,
 };
 
-// ─── Game Board Layout ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Game Board Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.BOARD = {
   LANES:             5,
   LANE_HEIGHT:       72,
-  TOP_OFFSET:        160,  // ample sky — background fills 0 to 160px
+  TOP_OFFSET:        160,  // ample sky â€” background fills 0 to 160px
   LEFT_MARGIN:       10,
   RIGHT_MARGIN:      10,
   CELL_WIDTH:        80,
-  CELLS_PER_LANE:    9,    // 9 cells — fenceX = 100 + 9×80 + 8 = 828; alien zone = 828→960 (132px)
+  CELLS_PER_LANE:    9,    // 9 cells â€” fenceX = 100 + 9Ã—80 + 8 = 828; alien zone = 828â†’960 (132px)
   HOME_X:            68,      // home base line
   ENEMY_SPAWN_X:     962,     // aliens enter right at screen edge (visible immediately)
   PLACEMENT_START_X: 100,     // first defender column, clear of building (HOME_X=68, bx ends at ~68)
-  SENTINEL_X:        76,      // sentinel just RIGHT of home wall — visible in first board column
+  SENTINEL_X:        76,      // sentinel just RIGHT of home wall â€” visible in first board column
   // Timeline area at very bottom
   TIMELINE_Y:        522,
   TIMELINE_HEIGHT:   55,
@@ -49,11 +49,11 @@ GW.BOARD = {
   TRAY_CARD_W:       64,
   TRAY_CARD_H:       52,
   TRAY_CARD_PAD:     5,
-  TRAY_START_X:      124,     // after plasma collector box (box occupies 8→116)
+  TRAY_START_X:      124,     // after plasma collector box (box occupies 8â†’116)
   MAX_LOADOUT:       6,
 };
 
-// ─── Wave Timeline ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Wave Timeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.WAVE_TIMELINE = {
   BAR_Y:        570,    // bottom of 600px canvas
   BAR_HEIGHT:   10,
@@ -67,30 +67,32 @@ GW.WAVE_TIMELINE = {
   },
 };
 
-// ─── Plasma Energy System ─────────────────────────────────────────────────────
+// â”€â”€â”€ Plasma Energy System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.RESOURCES = {
-  STARTING_ENERGY:       50,    // 50 plasma at start — enough for 1 generator but nothing more
-  MAX_ENERGY:            9999,  // PVZ-style cap — mythical cards cost 1500–3000
-  ORB_SPAWN_INTERVAL:    15000, // base interval; actual randomized 15000ms fixed
-  ORB_SPAWN_INTERVAL_MIN:15000, // 15s minimum between random plasma orbs
-  ORB_SPAWN_INTERVAL_MAX:15000, // 15s maximum — fixed 15s spawn cadence
+  STARTING_ENERGY:       50,    // 50 plasma at start
+  MAX_ENERGY:            9999,
+  // v1.0.1: random orb spawns every exactly 20 seconds
+  ORB_SPAWN_INTERVAL:    20000,
+  ORB_SPAWN_INTERVAL_MIN:20000,
+  ORB_SPAWN_INTERVAL_MAX:20000,
   ORB_SPAWN_COUNT:       1,
   ORB_VALUE:             25,
   ORB_LIFETIME:          18000,
-  KILL_REWARD_BASE:      10,    // alien kill gives 10 plasma
-  BASE_GEN_INTERVAL:     120000,// very slow background trickle
+  KILL_REWARD_BASE:      10,
+  BASE_GEN_INTERVAL:     120000,
   BASE_GEN_AMOUNT:       5,
-  REGEN_UNIT_INTERVAL:   11000, // P.E. Generator: randomized 10000–12000ms (nerfed)
-  REGEN_UNIT_INTERVAL_MIN: 10000,
-  REGEN_UNIT_INTERVAL_MAX: 12000,
+  // v1.0.1 NERF: PE Generator production interval 15â€“20 seconds (was 10â€“12)
+  REGEN_UNIT_INTERVAL:   17500, // midpoint default; actual randomized per cycle
+  REGEN_UNIT_INTERVAL_MIN: 15000,
+  REGEN_UNIT_INTERVAL_MAX: 20000,
   REGEN_UNIT_AMOUNT:     25,
 };
 
-// ─── Galactic Currency System ─────────────────────────────────────────────────
+// â”€â”€â”€ Galactic Currency System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CURRENCY = {
   // Drop chances (fraction) when alien is killed
-  DROP_CHANCE_MIN:    0.10,   // 10% minimum drop chance
-  DROP_CHANCE_MAX:    0.25,   // 25% maximum drop chance
+  DROP_CHANCE_MIN:    0.20,   // 20% minimum drop chance
+  DROP_CHANCE_MAX:    0.30,   // 30% maximum drop chance (capped)
   // Currency types with their values
   TYPES: {
     silver_coin: { id: 'silver_coin',  name: 'Silver Galactic Coin', value: 1,  color: 0xc0c0c0, glowColor: 0xe8e8ff },
@@ -103,7 +105,7 @@ GW.CURRENCY = {
   FLOAT_DURATION:  800,    // ms for collection float animation
 };
 
-// ─── Wave System ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Wave System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.WAVES = {
   BETWEEN_WAVE_DELAY:  9000,    // 8-10s pause between pre-wave and assault wave
   SPAWN_DELAY:         17500,   // 15-20s between individual pre-wave aliens
@@ -111,24 +113,24 @@ GW.WAVES = {
   PRESSURE_DELAY:      17500,
 };
 
-// ─── Combat ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Combat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.COMBAT = {
   PROJECTILE_SPEED:  380,
   DAMAGE_FLASH_MS:   120,
 };
 
-// ─── Defense Sentinel ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Defense Sentinel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.SENTINEL = {
-  TRIGGER_X:      60,     // px — alien must reach this x to trigger
+  TRIGGER_X:      60,     // px â€” alien must reach this x to trigger
   DAMAGE:         9999,   // one-shots all non-boss aliens
-  TRAVEL_SPEED:   480,    // px/s — sentinel travels through lane
+  TRAVEL_SPEED:   480,    // px/s â€” sentinel travels through lane
   ANIMATION_MS:   1200,   // activation + travel animation
   RECHARGE_MS:    0,      // 0 = single use per level
   AVAILABLE:      true,
   FRIENDLY_FIRE:  false,  // NEVER damages military units
 };
 
-// ─── Camera Reconnaissance ────────────────────────────────────────────────────
+// â”€â”€â”€ Camera Reconnaissance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CAMERA_RECON = {
   ENABLED:     false,  // Disabled: camera fadeIn used instead,   // Disabled: black overlay was causing black screen bug
   DURATION:    3500,   // total recon duration (ms)
@@ -137,9 +139,9 @@ GW.CAMERA_RECON = {
   BASE_HOLD:   600,        // time showing player base before unlock
 };
 
-// ─── Alien Equipment Variants ────────────────────────────────────────────────
+// â”€â”€â”€ Alien Equipment Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.ALIEN_EQUIPMENT = {
-  // ── 10 equipment tiers matching the spec table ────────────────────────────
+  // â”€â”€ 10 equipment tiers matching the spec table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Each entry: baseHp=100 (the alien body HP), extraHp=shield/armor HP on top,
   // speedMult=speed multiplier relative to base 28px/s.
   // breakAnim: visual played when equipment is destroyed.
@@ -161,7 +163,7 @@ GW.ALIEN_EQUIPMENT = {
   iron_mask: {
     id: 'iron_mask', name: 'Iron Mask Alien', tier: 3,
     baseHp: 100, extraHp: 50, totalHp: 150,
-    speedMult: 1.0, speedAfterBreak: 1.5,   // 1.5× speed when mask breaks (not 2×)
+    speedMult: 1.0, speedAfterBreak: 1.5,   // 1.5Ã— speed when mask breaks (not 2Ã—)
     equipColor: 0x78716c, equipName: 'Iron Mask',
     breakAnim: 'mask_crack',
   },
@@ -185,7 +187,7 @@ GW.ALIEN_EQUIPMENT = {
     speedMult: 0.8,
     equipColor: 0x0369a1, equipName: 'Energy Shield',
     breakAnim: 'shield_break',
-    shieldType: true,    // shield is separate from body — blocks projectiles
+    shieldType: true,    // shield is separate from body â€” blocks projectiles
   },
   heavy_helmet: {
     id: 'heavy_helmet', name: 'Heavy Helmet Alien', tier: 6,
@@ -218,19 +220,19 @@ GW.ALIEN_EQUIPMENT = {
   },
 };
 
-// ─── Battlefield Loadout ──────────────────────────────────────────────────────
+// â”€â”€â”€ Battlefield Loadout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.LOADOUT = {
-  MAX_CARDS:     6,       // Maximum cards in one battlefield session
-  DEFAULT_CARDS: ['plasma_energy_generator', 'fire_lance_gunner'],
+  MAX_CARDS:     6,
+  DEFAULT_CARDS: ['plasma_energy_generator', 'fire_lancer'],
 };
 
-// ─── Pause System ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ Pause System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.PAUSE = {
   KEY:           'P',     // Keyboard shortcut to pause
   MENU_OPTIONS: ['RESUME', 'RESTART', 'MUSIC', 'SFX', 'SETTINGS', 'RETURN TO MAP', 'QUIT'],
 };
 
-// ─── Menu Lock System ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Menu Lock System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Defines which modes are available from the start.
 // Other modes unlock through Adventure progression.
 GW.MENU_LOCKS = {
@@ -239,12 +241,12 @@ GW.MENU_LOCKS = {
   minigames:         { unlocked: false, unlockReq: { completeLevels: 5 }  },
   puzzle:            { unlocked: false, unlockReq: { completeLevels: 15 } },
   characters_profile:{ unlocked: false, unlockReq: { completeLevels: 1 }  },
-  extras:            { unlocked: false, unlockReq: { completeLevels: 20 } },
+  extras:            { unlocked: true,  unlockReq: null },
   settings:          { unlocked: true,  unlockReq: null },
   credits:           { unlocked: true,  unlockReq: null },
 };
 
-// ─── Creator Bitos System ─────────────────────────────────────────────────────
+// â”€â”€â”€ Creator Bitos System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CREATOR_BITOS = {
   // Levels where Creator Bitos actually APPEARS (rare)
   appearsOnLevels:    [5, 15, 25, 35, 45],
@@ -273,17 +275,17 @@ GW.CREATOR_BITOS = {
   // Digital briefing template (10/20/30/40/50 - no portrait)
   briefingTemplate: {
     prefix:    'TACTICAL SYSTEM INITIALIZING...',
-    separator: '──────────────────────────────',
+    separator: 'â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€',
     suffix:    'MISSION: SURVIVE THE INVASION.',
   },
 };
 
-// ─── Weapon Definitions ───────────────────────────────────────────────────────
+// â”€â”€â”€ Weapon Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.WEAPONS = {
-  // Era: early (historical gunpowder)
+  // v1.0.1: fire_lance range extended so ranged attackers can target enemies in alien zone
   fire_lance: {
     id: 'fire_lance', name: 'Fire Lance', era: 'early',
-    damage: 10, attackSpeed: 2800, range: 680,
+    damage: 10, attackSpeed: 2500, range: 900,
     projectileColor: 0xff6b00, projectileSize: 5, projectileType: 'fire',
     description: '10th-century Chinese fire-lance. Long range. 10 damage per shot.',
   },
@@ -371,39 +373,44 @@ GW.WEAPONS = {
   },
 };
 
-// ─── Military Card Definitions ────────────────────────────────────────────────
+// â”€â”€â”€ Military Card Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // EXACT COUNT VALIDATION:
 //   Starting cards (unlockLevel = 0 or 'start'): 2
 //   Adventure rewards (unlockLevel 2-49): 49
 //   Boss reward (unlockLevel 50, isBossReward): 1
 //   TOTAL: 52
 //
-// NOTE: plasma_energy_generator and fire_lance_gunner are the 2 starting cards.
+// NOTE: plasma_energy_generator and fire_lancer are the 2 starting cards.
 
 GW.CARDS = {
 
-  // ═══ STARTING CARDS (2) ════════════════════════════════════
+  // â•â•â• STARTING CARDS (2) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   plasma_energy_generator: {
     id: 'plasma_energy_generator', name: 'Plasma Generator',
     era: 'early', role: 'energy', cardSlot: 'start_1',
-    hp: 100, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    // v1.0.1 NERF: HP reduced from 100 to 50
+    hp: 50, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 50, unlockLevel: 'start', isBossReward: false,
     rarity: 'common',
-    deployCooldown: 7500,
+    // v1.0.1 NERF: deploy cooldown 10s (was 7.5s)
+    deployCooldown: 10000,
     color: 0xf59e0b, accentColor: 0xfef3c7,
-    isSupport: true, genInterval: 11000, genAmount: 25,
-    description: 'Common Plasma Energy Generator. Generates 25 Plasma every 10–12 seconds.',
+    isSupport: true, genInterval: 17500, genAmount: 25,
+    description: 'Common Plasma Energy Generator. Generates 25 Plasma every 15â€“20 seconds.',
     environment: 'all',
     strengthsText: 'Essential resource production.',
     weaknessesText: 'Cannot defend itself. Aliens will attack it.',
   },
-  fire_lance_gunner: {
-    id: 'fire_lance_gunner', name: 'Fire-Lance Gunner',
+  // v1.0.1: renamed from fire_lance_gunner â†’ fire_lancer
+  fire_lancer: {
+    id: 'fire_lancer', name: 'Fire-Lancer',
     era: 'early_10c', role: 'offense', cardSlot: 'start_2',
-    hp: 80, weapon: 'fire_lance', damage: 10, attackSpeed: 2800, range: 680,
+    // v1.0.1 NERF: HP reduced from 80 to 75
+    hp: 75, weapon: 'fire_lance', damage: 10, attackSpeed: 2500, range: 900,
     cost: 100, unlockLevel: 'start', isBossReward: false,
     rarity: 'common',
-    deployCooldown: 7500,
+    // v1.0.1 NERF: deploy cooldown 10s (was 7.5s)
+    deployCooldown: 10000,
     color: 0x7c3d0a, accentColor: 0xff6b00,
     helmetColor: 0x3d1a00, skinColor: 0xd4956a,
     isSupport: false,
@@ -413,14 +420,14 @@ GW.CARDS = {
     weaknessesText: 'Only 10 damage per shot. ~10 shots to kill 100 HP alien.',
   },
 
-  // ═══ LEVEL 1 REWARD ════════════════════════════════════════
+  // â•â•â• LEVEL 1 REWARD â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   bomber: {
-    id: 'bomber', name: 'Bomber',
-    era: 'early', role: 'offense', cardSlot: 'adv_1b',
-    hp: 60, weapon: null, damage: 80, attackSpeed: 0, range: 80,
+    id: 'bomber', name: 'The Bomb Man',
+    era: 'early', role: 'offense', cardSlot: 'adv_1',
+    hp: 70, weapon: null, damage: 80, attackSpeed: 2800, range: 120,
     cost: 120, unlockLevel: 1, isBossReward: false,
     rarity: 'common',
-    deployCooldown: 50000,  // 50s cooldown — single-use suicide bomber
+    deployCooldown: 12000,  // 12s deploy cooldown
     color: 0x7f1d1d, accentColor: 0xfca5a5,
     helmetColor: 0x450a0a, skinColor: 0xd4956a,
     isSupport: false,
@@ -433,7 +440,7 @@ GW.CARDS = {
 
   // Level 2 reward
   hand_cannon_soldier: {
-    id: 'hand_cannon_soldier', name: 'Hand-Cannon Soldier',
+    id: 'hand_cannon_soldier', name: 'Rifleman',
     era: 'early_15c', role: 'offense', cardSlot: 'adv_2',
     hp: 150, weapon: 'hand_cannon', damage: 40, attackSpeed: 2200, range: 320,
     cost: 100, unlockLevel: 2, isBossReward: false,
@@ -446,7 +453,7 @@ GW.CARDS = {
 
   // Level 3 reward
   arquebus_soldier: {
-    id: 'arquebus_soldier', name: 'Arquebus Soldier',
+    id: 'arquebus_soldier', name: 'Sniper',
     era: 'early_16c', role: 'offense', cardSlot: 'adv_3',
     hp: 130, weapon: 'arquebus', damage: 30, attackSpeed: 2400, range: 300,
     cost: 100, unlockLevel: 3, isBossReward: false,
@@ -459,7 +466,7 @@ GW.CARDS = {
 
   // Level 4 reward
   pikeman: {
-    id: 'pikeman', name: 'Pikeman',
+    id: 'pikeman', name: 'Heavy Gunner',
     era: 'early_15c', role: 'defense', cardSlot: 'adv_4',
     hp: 220, weapon: null, damage: 15, attackSpeed: 1200, range: 60,
     cost: 75, unlockLevel: 4, isBossReward: false,
@@ -471,7 +478,7 @@ GW.CARDS = {
 
   // Level 5 reward (Creator Bitos event level)
   drummer_boy: {
-    id: 'drummer_boy', name: 'Drummer',
+    id: 'drummer_boy', name: 'Rocket Trooper',
     era: 'early', role: 'support', cardSlot: 'adv_5',
     hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 75, unlockLevel: 5, isBossReward: false,
@@ -484,7 +491,7 @@ GW.CARDS = {
 
   // Level 6 reward
   field_cannon: {
-    id: 'field_cannon', name: 'Field Cannon',
+    id: 'field_cannon', name: 'Combat Medic',
     era: 'early_18c', role: 'artillery', cardSlot: 'adv_6',
     hp: 180, weapon: 'mortar', damage: 75, attackSpeed: 4500, range: 450,
     cost: 175, unlockLevel: 6, isBossReward: false,
@@ -496,7 +503,7 @@ GW.CARDS = {
 
   // Level 7 reward
   supply_officer: {
-    id: 'supply_officer', name: 'Supply Officer',
+    id: 'supply_officer', name: 'Shield Soldier',
     era: 'early', role: 'energy', cardSlot: 'adv_7',
     hp: 90, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 75, unlockLevel: 7, isBossReward: false,
@@ -509,7 +516,7 @@ GW.CARDS = {
 
   // Level 8 reward
   sharpshooter: {
-    id: 'sharpshooter', name: 'Sharpshooter',
+    id: 'sharpshooter', name: 'Machine Gunner',
     era: 'industrial', role: 'offense', cardSlot: 'adv_8',
     hp: 120, weapon: 'rifle', damage: 45, attackSpeed: 1600, range: 420,
     cost: 125, unlockLevel: 8, isBossReward: false,
@@ -522,7 +529,7 @@ GW.CARDS = {
 
   // Level 9 reward
   field_medic_early: {
-    id: 'field_medic_early', name: 'Field Surgeon',
+    id: 'field_medic_early', name: 'Grenadier',
     era: 'industrial', role: 'medic', cardSlot: 'adv_9',
     hp: 100, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 100, unlockLevel: 9, isBossReward: false,
@@ -535,7 +542,7 @@ GW.CARDS = {
 
   // Level 10 reward (digital briefing milestone)
   machine_gunner: {
-    id: 'machine_gunner', name: 'Machine Gunner',
+    id: 'machine_gunner', name: 'Tank Commander',
     era: 'modern', role: 'offense', cardSlot: 'adv_10',
     hp: 200, weapon: 'machine_gun', damage: 20, attackSpeed: 600, range: 320,
     cost: 200, unlockLevel: 10, isBossReward: false,
@@ -548,7 +555,7 @@ GW.CARDS = {
 
   // Level 11 reward
   night_rifleman: {
-    id: 'night_rifleman', name: 'Night Rifleman',
+    id: 'night_rifleman', name: 'Night Stalker',
     era: 'industrial', role: 'offense', cardSlot: 'adv_11',
     hp: 140, weapon: 'rifle', damage: 50, attackSpeed: 1800, range: 380,
     cost: 125, unlockLevel: 11, isBossReward: false,
@@ -561,7 +568,7 @@ GW.CARDS = {
 
   // Level 12 reward
   scout: {
-    id: 'scout', name: 'Scout',
+    id: 'scout', name: 'Shadow Sniper',
     era: 'industrial', role: 'recon', cardSlot: 'adv_12',
     hp: 90, weapon: 'service_pistol', damage: 25, attackSpeed: 1200, range: 280,
     cost: 75, unlockLevel: 12, isBossReward: false,
@@ -574,7 +581,7 @@ GW.CARDS = {
 
   // Level 13 reward
   flare_operator: {
-    id: 'flare_operator', name: 'Flare Operator',
+    id: 'flare_operator', name: 'Stealth Operative',
     era: 'industrial', role: 'support', cardSlot: 'adv_13',
     hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 75, unlockLevel: 13, isBossReward: false,
@@ -587,7 +594,7 @@ GW.CARDS = {
 
   // Level 14 reward
   trench_soldier: {
-    id: 'trench_soldier', name: 'Trench Soldier',
+    id: 'trench_soldier', name: 'Night Vision Gunner',
     era: 'industrial', role: 'defense', cardSlot: 'adv_14',
     hp: 280, weapon: 'musket', damage: 35, attackSpeed: 2000, range: 240,
     cost: 150, unlockLevel: 14, isBossReward: false,
@@ -599,7 +606,7 @@ GW.CARDS = {
 
   // Level 15 reward (Creator Bitos event level)
   searchlight_operator: {
-    id: 'searchlight_operator', name: 'Searchlight Op.',
+    id: 'searchlight_operator', name: 'Tactical Assassin',
     era: 'industrial', role: 'support', cardSlot: 'adv_15',
     hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 100, unlockLevel: 15, isBossReward: false,
@@ -612,7 +619,7 @@ GW.CARDS = {
 
   // Level 16 reward
   radio_operator: {
-    id: 'radio_operator', name: 'Radio Operator',
+    id: 'radio_operator', name: 'Silent Ranger',
     era: 'modern', role: 'support', cardSlot: 'adv_16',
     hp: 85, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 100, unlockLevel: 16, isBossReward: false,
@@ -625,7 +632,7 @@ GW.CARDS = {
 
   // Level 17 reward
   armored_soldier: {
-    id: 'armored_soldier', name: 'Armored Soldier',
+    id: 'armored_soldier', name: 'Phantom Trooper',
     era: 'modern', role: 'defense', cardSlot: 'adv_17',
     hp: 350, weapon: 'service_pistol', damage: 20, attackSpeed: 1600, range: 240,
     cost: 175, unlockLevel: 17, isBossReward: false,
@@ -637,7 +644,7 @@ GW.CARDS = {
 
   // Level 18 reward
   night_medic: {
-    id: 'night_medic', name: 'Night Medic',
+    id: 'night_medic', name: 'Recon Specialist',
     era: 'modern', role: 'medic', cardSlot: 'adv_18',
     hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 125, unlockLevel: 18, isBossReward: false,
@@ -650,7 +657,7 @@ GW.CARDS = {
 
   // Level 19 reward
   sniper: {
-    id: 'sniper', name: 'Sniper',
+    id: 'sniper', name: 'Night Hunter',
     era: 'industrial', role: 'offense', cardSlot: 'adv_19',
     hp: 100, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 520,
     cost: 175, unlockLevel: 19, isBossReward: false,
@@ -663,7 +670,7 @@ GW.CARDS = {
 
   // Level 20 reward (digital briefing milestone)
   recon_unit: {
-    id: 'recon_unit', name: 'Recon Unit',
+    id: 'recon_unit', name: 'Shadow Commander',
     era: 'modern', role: 'recon', cardSlot: 'adv_20',
     hp: 90, weapon: 'service_pistol', damage: 20, attackSpeed: 1000, range: 350,
     cost: 100, unlockLevel: 20, isBossReward: false,
@@ -676,7 +683,7 @@ GW.CARDS = {
 
   // Level 21 reward
   gas_mask_soldier: {
-    id: 'gas_mask_soldier', name: 'Gas-Mask Soldier',
+    id: 'gas_mask_soldier', name: 'Marine Rifleman',
     era: 'industrial', role: 'offense', cardSlot: 'adv_21',
     hp: 160, weapon: 'rifle', damage: 40, attackSpeed: 1800, range: 360,
     cost: 125, unlockLevel: 21, isBossReward: false,
@@ -688,7 +695,7 @@ GW.CARDS = {
 
   // Level 22 reward
   mortar_team: {
-    id: 'mortar_team', name: 'Mortar Team',
+    id: 'mortar_team', name: 'Depth Diver',
     era: 'industrial', role: 'artillery', cardSlot: 'adv_22',
     hp: 150, weapon: 'mortar', damage: 85, attackSpeed: 4500, range: 480,
     cost: 175, unlockLevel: 22, isBossReward: false,
@@ -700,7 +707,7 @@ GW.CARDS = {
 
   // Level 23 reward
   field_mechanic: {
-    id: 'field_mechanic', name: 'Field Mechanic',
+    id: 'field_mechanic', name: 'Torpedo Soldier',
     era: 'modern', role: 'engineer', cardSlot: 'adv_23',
     hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 125, unlockLevel: 23, isBossReward: false,
@@ -713,7 +720,7 @@ GW.CARDS = {
 
   // Level 24 reward
   heavy_rifleman: {
-    id: 'heavy_rifleman', name: 'Heavy Rifleman',
+    id: 'heavy_rifleman', name: 'Hydro Gunner',
     era: 'modern', role: 'offense', cardSlot: 'adv_24',
     hp: 190, weapon: 'rifle', damage: 55, attackSpeed: 1600, range: 380,
     cost: 150, unlockLevel: 24, isBossReward: false,
@@ -725,7 +732,7 @@ GW.CARDS = {
 
   // Level 25 reward (Creator Bitos event level)
   forward_observer: {
-    id: 'forward_observer', name: 'Forward Observer',
+    id: 'forward_observer', name: 'Amphibious Trooper',
     era: 'modern', role: 'recon', cardSlot: 'adv_25',
     hp: 95, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 100, unlockLevel: 25, isBossReward: false,
@@ -738,7 +745,7 @@ GW.CARDS = {
 
   // Level 26 reward
   modern_rifleman: {
-    id: 'modern_rifleman', name: 'Modern Rifleman',
+    id: 'modern_rifleman', name: 'Naval Sniper',
     era: 'modern', role: 'offense', cardSlot: 'adv_26',
     hp: 170, weapon: 'machine_gun', damage: 25, attackSpeed: 800, range: 320,
     cost: 175, unlockLevel: 26, isBossReward: false,
@@ -750,7 +757,7 @@ GW.CARDS = {
 
   // Level 27 reward
   shield_operator: {
-    id: 'shield_operator', name: 'Shield Operator',
+    id: 'shield_operator', name: 'Submarine Engineer',
     era: 'modern', role: 'defense', cardSlot: 'adv_27',
     hp: 250, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 175, unlockLevel: 27, isBossReward: false,
@@ -763,7 +770,7 @@ GW.CARDS = {
 
   // Level 28 reward
   combat_medic: {
-    id: 'combat_medic', name: 'Combat Medic',
+    id: 'combat_medic', name: 'Aqua Grenadier',
     era: 'modern', role: 'medic', cardSlot: 'adv_28',
     hp: 130, weapon: 'service_pistol', damage: 15, attackSpeed: 1600, range: 200,
     cost: 150, unlockLevel: 28, isBossReward: false,
@@ -776,7 +783,7 @@ GW.CARDS = {
 
   // Level 29 reward
   drone_operator: {
-    id: 'drone_operator', name: 'Drone Operator',
+    id: 'drone_operator', name: 'Sea Raider',
     era: 'modern', role: 'aerial', cardSlot: 'adv_29',
     hp: 100, weapon: null, damage: 40, attackSpeed: 2000, range: 500,
     cost: 200, unlockLevel: 29, isBossReward: false,
@@ -789,7 +796,7 @@ GW.CARDS = {
 
   // Level 30 reward (digital briefing milestone)
   rocket_specialist: {
-    id: 'rocket_specialist', name: 'Rocket Specialist',
+    id: 'rocket_specialist', name: 'Admiral Defender',
     era: 'modern', role: 'heavy', cardSlot: 'adv_30',
     hp: 175, weapon: 'rocket_launcher', damage: 140, attackSpeed: 5000, range: 480,
     cost: 225, unlockLevel: 30, isBossReward: false,
@@ -801,7 +808,7 @@ GW.CARDS = {
 
   // Level 31 reward
   mobile_generator: {
-    id: 'mobile_generator', name: 'Mobile Generator',
+    id: 'mobile_generator', name: 'Fog Recon',
     era: 'modern', role: 'energy', cardSlot: 'adv_31',
     hp: 140, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 100, unlockLevel: 31, isBossReward: false,
@@ -814,7 +821,7 @@ GW.CARDS = {
 
   // Level 32 reward
   plasma_tech_engineer: {
-    id: 'plasma_tech_engineer', name: 'Plasma Tech',
+    id: 'plasma_tech_engineer', name: 'Mist Sniper',
     era: 'advanced', role: 'engineer', cardSlot: 'adv_32',
     hp: 120, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 150, unlockLevel: 32, isBossReward: false,
@@ -827,7 +834,7 @@ GW.CARDS = {
 
   // Level 33 reward
   grenadier: {
-    id: 'grenadier', name: 'Grenadier',
+    id: 'grenadier', name: 'Smoke Trooper',
     era: 'modern', role: 'offense', cardSlot: 'adv_33',
     hp: 170, weapon: 'grenade_launcher', damage: 80, attackSpeed: 3000, range: 380,
     cost: 175, unlockLevel: 33, isBossReward: false,
@@ -839,7 +846,7 @@ GW.CARDS = {
 
   // Level 34 reward
   hazmat_trooper: {
-    id: 'hazmat_trooper', name: 'Hazmat Trooper',
+    id: 'hazmat_trooper', name: 'Radar Specialist',
     era: 'advanced', role: 'offense', cardSlot: 'adv_34',
     hp: 160, weapon: 'plasma_rifle', damage: 55, attackSpeed: 1400, range: 360,
     cost: 200, unlockLevel: 34, isBossReward: false,
@@ -852,7 +859,7 @@ GW.CARDS = {
 
   // Level 35 reward (Creator Bitos event level)
   radiation_specialist: {
-    id: 'radiation_specialist', name: 'Rad. Specialist',
+    id: 'radiation_specialist', name: 'Chemical Warfare Soldier',
     era: 'advanced', role: 'support', cardSlot: 'adv_35',
     hp: 100, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 125, unlockLevel: 35, isBossReward: false,
@@ -865,7 +872,7 @@ GW.CARDS = {
 
   // Level 36 reward
   plasma_soldier: {
-    id: 'plasma_soldier', name: 'Plasma Trooper',
+    id: 'plasma_soldier', name: 'Ghost Gunner',
     era: 'advanced', role: 'offense', cardSlot: 'adv_36',
     hp: 180, weapon: 'plasma_rifle', damage: 60, attackSpeed: 1200, range: 420,
     cost: 225, unlockLevel: 36, isBossReward: false,
@@ -878,7 +885,7 @@ GW.CARDS = {
 
   // Level 37 reward
   energy_shield_generator: {
-    id: 'energy_shield_generator', name: 'Shield Generator',
+    id: 'energy_shield_generator', name: 'Fog Bomber',
     era: 'advanced', role: 'defense', cardSlot: 'adv_37',
     hp: 160, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 200, unlockLevel: 37, isBossReward: false,
@@ -891,7 +898,7 @@ GW.CARDS = {
 
   // Level 38 reward
   combat_drone: {
-    id: 'combat_drone', name: 'Combat Drone',
+    id: 'combat_drone', name: 'Tactical Spotter',
     era: 'futuristic', role: 'aerial', cardSlot: 'adv_38',
     hp: 80, weapon: 'laser_weapon', damage: 70, attackSpeed: 900, range: 460,
     cost: 250, unlockLevel: 38, isBossReward: false,
@@ -903,7 +910,7 @@ GW.CARDS = {
 
   // Level 39 reward
   autonomous_robot: {
-    id: 'autonomous_robot', name: 'Auto Robot',
+    id: 'autonomous_robot', name: 'Specter Ranger',
     era: 'futuristic', role: 'offense', cardSlot: 'adv_39',
     hp: 220, weapon: 'machine_gun', damage: 30, attackSpeed: 700, range: 340,
     cost: 250, unlockLevel: 39, isBossReward: false,
@@ -915,7 +922,7 @@ GW.CARDS = {
 
   // Level 40 reward (digital briefing milestone)
   plasma_mech: {
-    id: 'plasma_mech', name: 'Plasma Mech',
+    id: 'plasma_mech', name: 'Phantom Commander',
     era: 'futuristic', role: 'heavy', cardSlot: 'adv_40',
     hp: 400, weapon: 'plasma_rifle', damage: 90, attackSpeed: 1400, range: 380,
     cost: 300, unlockLevel: 40, isBossReward: false,
@@ -927,7 +934,7 @@ GW.CARDS = {
 
   // Level 41 reward
   laser_specialist: {
-    id: 'laser_specialist', name: 'Laser Specialist',
+    id: 'laser_specialist', name: 'Hazmat Trooper',
     era: 'futuristic', role: 'offense', cardSlot: 'adv_41',
     hp: 160, weapon: 'laser_weapon', damage: 90, attackSpeed: 1000, range: 480,
     cost: 275, unlockLevel: 41, isBossReward: false,
@@ -940,7 +947,7 @@ GW.CARDS = {
 
   // Level 42 reward
   energy_specialist: {
-    id: 'energy_specialist', name: 'Energy Specialist',
+    id: 'energy_specialist', name: 'Radiation Gunner',
     era: 'advanced', role: 'energy', cardSlot: 'adv_42',
     hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 175, unlockLevel: 42, isBossReward: false,
@@ -953,7 +960,7 @@ GW.CARDS = {
 
   // Level 43 reward
   heavy_plasma_trooper: {
-    id: 'heavy_plasma_trooper', name: 'Heavy Plasma',
+    id: 'heavy_plasma_trooper', name: 'Plasma Soldier',
     era: 'futuristic', role: 'heavy', cardSlot: 'adv_43',
     hp: 260, weapon: 'plasma_rifle', damage: 80, attackSpeed: 1100, range: 440,
     cost: 325, unlockLevel: 43, isBossReward: false,
@@ -965,7 +972,7 @@ GW.CARDS = {
 
   // Level 44 reward
   support_specialist: {
-    id: 'support_specialist', name: 'Support Spec.',
+    id: 'support_specialist', name: 'Nuclear Engineer',
     era: 'futuristic', role: 'support', cardSlot: 'adv_44',
     hp: 120, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 175, unlockLevel: 44, isBossReward: false,
@@ -978,7 +985,7 @@ GW.CARDS = {
 
   // Level 45 reward (Creator Bitos event level)
   experimental_soldier: {
-    id: 'experimental_soldier', name: 'Experimental',
+    id: 'experimental_soldier', name: 'Mutant Hunter',
     era: 'futuristic', role: 'offense', cardSlot: 'adv_45',
     hp: 200, weapon: 'laser_weapon', damage: 110, attackSpeed: 1200, range: 500,
     cost: 350, unlockLevel: 45, isBossReward: false,
@@ -990,7 +997,7 @@ GW.CARDS = {
 
   // Level 46 reward
   advanced_combatant: {
-    id: 'advanced_combatant', name: 'Advanced Fighter',
+    id: 'advanced_combatant', name: 'Atomic Sniper',
     era: 'futuristic', role: 'offense', cardSlot: 'adv_46',
     hp: 230, weapon: 'plasma_rifle', damage: 100, attackSpeed: 1100, range: 460,
     cost: 325, unlockLevel: 46, isBossReward: false,
@@ -1002,7 +1009,7 @@ GW.CARDS = {
 
   // Level 47 reward
   repair_technician: {
-    id: 'repair_technician', name: 'Repair Tech',
+    id: 'repair_technician', name: 'Reactor Guard',
     era: 'futuristic', role: 'engineer', cardSlot: 'adv_47',
     hp: 130, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 175, unlockLevel: 47, isBossReward: false,
@@ -1015,7 +1022,7 @@ GW.CARDS = {
 
   // Level 48 reward
   ammo_specialist: {
-    id: 'ammo_specialist', name: 'Ammo Specialist',
+    id: 'ammo_specialist', name: 'Biohazard Specialist',
     era: 'futuristic', role: 'support', cardSlot: 'adv_48',
     hp: 105, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 150, unlockLevel: 48, isBossReward: false,
@@ -1028,7 +1035,7 @@ GW.CARDS = {
 
   // Level 49 reward
   plasma_shield_unit: {
-    id: 'plasma_shield_unit', name: 'Plasma Shield',
+    id: 'plasma_shield_unit', name: 'Radiation Destroyer',
     era: 'futuristic', role: 'defense', cardSlot: 'adv_49',
     hp: 300, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 250, unlockLevel: 49, isBossReward: false,
@@ -1039,9 +1046,9 @@ GW.CARDS = {
     specialAbility: 'plasma_barrier',
   },
 
-  // ═══ FINAL BOSS REWARD — Level 50 (1) ═══════════════════════
+  // â•â•â• FINAL BOSS REWARD â€” Level 50 (1) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   plasma_cannon_warrior: {
-    id: 'plasma_cannon_warrior', name: 'Plasma Cannon',
+    id: 'plasma_cannon_warrior', name: 'Planetary Guardian',
     era: 'futuristic_22c', role: 'heavy', cardSlot: 'boss_50',
     hp: 200, weapon: 'plasma_cannon', damage: 200, attackSpeed: 2500, range: 560,
     cost: 400, unlockLevel: 50, isBossReward: true,
@@ -1056,7 +1063,7 @@ GW.CARDS = {
   },
 };
 
-// ─── CARD COUNT VALIDATION ────────────────────────────────────────────────────
+// â”€â”€â”€ CARD COUNT VALIDATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function validateCardCount() {
   const all = Object.values(GW.CARDS);
   const starting  = all.filter(c => c.unlockLevel === 'start').length;
@@ -1070,30 +1077,35 @@ GW.CARDS = {
   }
 })();
 
-// ─── Alias: GW.CHARACTERS points to GW.CARDS for game system compatibility ───
+// â”€â”€â”€ Alias: GW.CHARACTERS points to GW.CARDS for game system compatibility â”€â”€â”€
 // The game engine uses GW.CHARACTERS; cards extend this.
 Object.defineProperty(GW, 'CHARACTERS', {
   get() { return GW.CARDS; },
   configurable: true,
 });
 
-// ─── Alien Enemy Definitions ──────────────────────────────────────────────────
+// â”€â”€â”€ Alien Enemy Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.ENEMIES = {
-  // LEVEL 1: Common Alien (flag variant also defined)
+  // LEVEL 1: Common Alien
   vex_drone: {
     id: 'vex_drone', name: 'Vex Drone', class: 'basic', tier: 1,
-    hp: 100, speed: 12, damage: 10, attackCooldown: 2200, reward: 10,
+    // v1.0.3: HP 200; speed 0.75x baseline = 9px/s
+    hp: 200, speed: 9, damage: 20, attackCooldown: 2500, reward: 10,
     color: 0x7c3aed, accentColor: 0xc4b5fd, eyeColor: 0x00ff88,
-    description: 'Common alien. Slow walking speed. 100 HP baseline.',
+    description: 'Common alien. Uses purple stick for melee. 200 HP. Damage scales with low HP.',
     specialAbility: null, introducedLevel: 1,
-    equipment: 'bare',   // default equipment variant
+    equipment: 'bare',
+    // Stick-swing weapon
+    weaponType: 'stick',
+    stickColor: 0x9333ea,
   },
-  // FLAG variant — appears in Wave 1 of Level 1-1 (2x speed)
+  // FLAG variant â€” pinkish horde leader
   vex_flag_bearer: {
     id: 'vex_flag_bearer', name: 'Flag Bearer', class: 'fast', tier: 1,
-    hp: 100, speed: 18, damage: 10, attackCooldown: 2200, reward: 30,
+    // v1.0.3: speed 0.90x baseline = 10.8px/s (flag bearer leads each wave horde)
+    hp: 200, speed: 10.8, damage: 20, attackCooldown: 2500, reward: 30,
     color: 0xe879f9, accentColor: 0xfbbf24, eyeColor: 0xfbbf24,
-    description: 'Carries invasion flag. 1.5× baseline speed. Leads the horde charge.',
+    description: 'Carries invasion flag. 0.90× baseline speed. Leads the horde charge.',
     specialAbility: 'flag_rush', introducedLevel: 1, isFlag: true,
   },
   vex_runner: {
@@ -1183,34 +1195,34 @@ GW.ENEMIES = {
     ],
   },
 };
-// ─── Extended Alien Variety ────────────────────────────────────────────────────
+// â”€â”€â”€ Extended Alien Variety â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Architecture for future alien classes. Speed values are multiples of the
-// 12px/s baseline (vex_drone). Not all may be implemented in combat yet —
+// 12px/s baseline (vex_drone). Not all may be implemented in combat yet â€”
 // this registers them so wave generator and future scenes can reference them.
 GW.ENEMY_CATEGORIES = {
 
-  // ── UNCOMMON (faster than common, introduced in mid-game) ─────────────────
+  // â”€â”€ UNCOMMON (faster than common, introduced in mid-game) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vex_agile: {
     id: 'vex_agile', name: 'Vex Agile', class: 'uncommon', tier: 2,
     hp: 60, speed: 24, damage: 8, attackCooldown: 1800, reward: 20,
     color: 0x34d399, accentColor: 0x6ee7b7, eyeColor: 0x00ffcc,
-    description: 'Quick, lightweight alien. 2× baseline speed. Low HP.',
+    description: 'Quick, lightweight alien. 2Ã— baseline speed. Low HP.',
     specialAbility: null, introducedLevel: 5,
   },
   vex_raider: {
     id: 'vex_raider', name: 'Vex Raider', class: 'uncommon', tier: 2,
     hp: 80, speed: 28, damage: 12, attackCooldown: 1600, reward: 30,
     color: 0xf97316, accentColor: 0xfed7aa, eyeColor: 0xff6b00,
-    description: 'Aggressive uncommon. 2.3× speed, moderate HP.',
+    description: 'Aggressive uncommon. 2.3Ã— speed, moderate HP.',
     specialAbility: 'charge', introducedLevel: 6,
   },
 
-  // ── ADVANCED MOBILE (vehicle/hover-based) ────────────────────────────────
+  // â”€â”€ ADVANCED MOBILE (vehicle/hover-based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vex_tiny_ship: {
     id: 'vex_tiny_ship', name: 'Floating Tiny Ship', class: 'aerial', tier: 4,
     hp: 80, speed: 24, damage: 12, attackCooldown: 2000, reward: 55,
     color: 0x818cf8, accentColor: 0xc7d2fe, eyeColor: 0x6366f1,
-    description: 'Flies over ground-level obstacles. 2× speed. Medium HP.',
+    description: 'Flies over ground-level obstacles. 2Ã— speed. Medium HP.',
     specialAbility: 'hover', introducedLevel: 22,
     isAerial: true,
   },
@@ -1218,7 +1230,7 @@ GW.ENEMY_CATEGORIES = {
     id: 'vex_hover_bike', name: 'Hover Bike Alien', class: 'vehicle', tier: 4,
     hp: 90, speed: 30, damage: 15, attackCooldown: 1800, reward: 65,
     color: 0x6366f1, accentColor: 0xa5b4fc, eyeColor: 0x818cf8,
-    description: 'Mounted on hover bike. 2.5× speed. Bypasses ground traps.',
+    description: 'Mounted on hover bike. 2.5Ã— speed. Bypasses ground traps.',
     specialAbility: 'hover_speed', introducedLevel: 24,
     isVehicle: true,
   },
@@ -1226,7 +1238,7 @@ GW.ENEMY_CATEGORIES = {
     id: 'vex_vehicle_rider', name: 'Vehicle Rider', class: 'vehicle', tier: 5,
     hp: 200, speed: 30, damage: 22, attackCooldown: 1600, reward: 80,
     color: 0x475569, accentColor: 0x94a3b8, eyeColor: 0x60a5fa,
-    description: 'Heavy alien vehicle. 2.5× speed, high HP.',
+    description: 'Heavy alien vehicle. 2.5Ã— speed, high HP.',
     specialAbility: 'ram', introducedLevel: 28,
     isVehicle: true,
   },
@@ -1234,7 +1246,7 @@ GW.ENEMY_CATEGORIES = {
     id: 'vex_jetpack', name: 'Jetpack Alien', class: 'aerial', tier: 5,
     hp: 70, speed: 36, damage: 18, attackCooldown: 1800, reward: 90,
     color: 0xef4444, accentColor: 0xfca5a5, eyeColor: 0xff0000,
-    description: 'Jetpack propulsion. 3× speed, can jump over one defender.',
+    description: 'Jetpack propulsion. 3Ã— speed, can jump over one defender.',
     specialAbility: 'jetpack_leap', introducedLevel: 30,
     isAerial: true,
   },
@@ -1242,12 +1254,12 @@ GW.ENEMY_CATEGORIES = {
     id: 'vex_hover_alien', name: 'Hover Alien', class: 'aerial', tier: 4,
     hp: 110, speed: 22, damage: 14, attackCooldown: 2000, reward: 60,
     color: 0x7c3aed, accentColor: 0xc4b5fd, eyeColor: 0xe879f9,
-    description: 'Levitates above ground. Immune to lane hazards. 1.8× speed.',
+    description: 'Levitates above ground. Immune to lane hazards. 1.8Ã— speed.',
     specialAbility: 'hover', introducedLevel: 20,
     isAerial: true,
   },
 
-  // ── SPECIAL / ABILITY-BASED ───────────────────────────────────────────────
+  // â”€â”€ SPECIAL / ABILITY-BASED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vex_burrower: {
     id: 'vex_burrower', name: 'Burrower Alien', class: 'special', tier: 5,
     hp: 120, speed: 16, damage: 20, attackCooldown: 2400, reward: 95,
@@ -1304,8 +1316,8 @@ GW.ENEMY_CATEGORIES = {
 Object.assign(GW.ENEMIES, GW.ENEMY_CATEGORIES);
 
 
-// ─── Environment Definitions ──────────────────────────────────────────────────
-// SPEC §9: Exact 5 environments with exact level ranges
+// â”€â”€â”€ Environment Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// SPEC Â§9: Exact 5 environments with exact level ranges
 GW.ENVIRONMENTS = {
   daytime: {
     id: 'daytime', name: 'Daytime', levelRange: [1, 10],
@@ -1329,14 +1341,14 @@ GW.ENVIRONMENTS = {
     alias: 'night',
   },
   foggy: {
-    id: 'foggy', name: 'Foggy', levelRange: [21, 30],
-    skyColors: [0x9ca3af, 0xd1d5db],
-    groundColor: 0x3d4a2a, laneEven: 0x2d3a1a, laneOdd: 0x263318,
-    grassColor: 0x365314, soilColor: 0x4a3a28,
-    ambientLight: 0.6, fogEnabled: true, fogDensity: 0.6, visibilityRange: 240,
-    description: 'Dense fog. Reconnaissance and trench warfare.',
-    menuAnimType: 'fog_layers',
-    alias: 'fog',
+    id: 'foggy', name: 'Flooded', levelRange: [21, 30],
+    skyColors: [0x6b9aa8, 0xb5d8dc],
+    groundColor: 0x31535a, laneEven: 0x28525a, laneOdd: 0x234951,
+    grassColor: 0x3f786d, soilColor: 0x3b5554,
+    ambientLight: 0.72, fogEnabled: false, waterEnabled: true,
+    description: 'Waterlogged lowlands. Hold the lanes through the flooded basin.',
+    menuAnimType: 'water_ripples',
+    alias: 'flooded',
   },
   rainy_stormy: {
     id: 'rainy_stormy', name: 'Rainy / Stormy', levelRange: [31, 40],
@@ -1365,7 +1377,7 @@ GW.ENVIRONMENTS = {
   spaceship: { id: 'spaceship', name: 'Spaceship', laneEven: 0x140a24, laneOdd: 0x10081e, alias: 'spaceship' },
 };
 
-// ─── Level Definitions ────────────────────────────────────────────────────────
+// â”€â”€â”€ Level Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function _buildLevels() {
   const L = {};
 
@@ -1378,15 +1390,15 @@ GW.ENVIRONMENTS = {
     return 'radioactive';
   }
 
-  // Level 1 — Fully implemented with proper wave structure (spec §38)
+  // Level 1 â€” Fully implemented with proper wave structure (spec Â§38)
   L[1] = {
     id: 1, name: 'First Light', environment: envForLevel(1),
     unlocked: true, completed: false, difficulty: 'easy',
     startingEnergy: 0,
-    availableDefenders: ['plasma_energy_generator', 'fire_lance_gunner'],
+    availableDefenders: ['plasma_energy_generator', 'fire_lancer'],
     availableEnemies:   ['vex_drone', 'vex_flag_bearer'],
     sentinelAvailable:  true,
-    reward: { cardId: 'bomber' },  // Level 1 reward: Bomber (common — unlocked by clearing First Light)
+    reward: { cardId: 'bomber' },  // Level 1 reward: Bomber (common â€” unlocked by clearing First Light)
     unlockRequirement: null,
     victoryCondition: 'survive_waves',
     defeatCondition:  'enemy_reaches_home',
@@ -1394,8 +1406,8 @@ GW.ENVIRONMENTS = {
     digitalBriefingEvent:    false,
     briefing: 'Alien scouts have breached the perimeter. Deploy your Plasma Generator first. Keep your Fire-Lance Gunner ready.',
     waves: [
-      // ── Phase 1: 30 individual scouts ──────────────────────────────────────
-      // halfHpChain:true — WaveManager will spawn the NEXT scout only when the
+      // â”€â”€ Phase 1: 30 individual scouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // halfHpChain:true â€” WaveManager will spawn the NEXT scout only when the
       // PREVIOUS one reaches half HP, rather than using fixed delay offsets.
       // Lanes are randomised (not staircase) so aliens appear unpredictably.
       { id: 'scouts', label: 'SCOUTS', halfHpChain: true, enemies: [
@@ -1430,13 +1442,13 @@ GW.ENVIRONMENTS = {
         { type: 'vex_drone', lane: 5, delay: 0 },
         { type: 'vex_drone', lane: 3, delay: 0 },
       ]},
-      // ── Phase 2: The Horde ─────────────────────────────────────────────────
-      // hordeDelay:4000 — WaveManager waits 4s after the flag bearer warning
+      // â”€â”€ Phase 2: The Horde â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // hordeDelay:4000 â€” WaveManager waits 4s after the flag bearer warning
       // before spawning the 20 drones so the player has time to react.
       // Drones are spread across random lanes so they form a visible line,
-      // not a staircase. Flag Bearer (1.5× speed) leads from lane 3.
-      { id: 'horde', label: 'THE HORDE', isMajorWave: true, isFinalWave: true, hordeDelay: 4000, enemies: [
-        { type: 'vex_flag_bearer', lane: 3, delay: 0 },   // leads — 1.5× speed, pinkish
+      // not a staircase. Flag Bearer (1.5Ã— speed) leads from lane 3.
+      { id: 'horde', label: 'THE HORDE', isHorde: true, warningDelay: 3000, isMajorWave: true, isFinalWave: true, enemies: [
+        { type: 'vex_flag_bearer', lane: 3, delay: 0 },   // leads â€” 1.5Ã— speed, pinkish
         { type: 'vex_drone', lane: 1, delay: 0 },
         { type: 'vex_drone', lane: 2, delay: 0 },
         { type: 'vex_drone', lane: 4, delay: 0 },
@@ -1467,40 +1479,40 @@ GW.ENVIRONMENTS = {
     { id:2,  name:'Morning Patrol',      env:'daytime',     diff:'easy',   cardId:'hand_cannon_soldier' },
     { id:3,  name:'Garden Perimeter',    env:'daytime',     diff:'easy',   cardId:'arquebus_soldier' },
     { id:4,  name:'Fast Approach',       env:'daytime',     diff:'easy',   cardId:'pikeman' },
-    { id:5,  name:'Backyard Rush',       env:'daytime',     diff:'medium', cardId:'drummer_boy',        creatorBitos:true },
-    { id:6,  name:'The Fence Line',      env:'daytime',     diff:'medium', cardId:'field_cannon' },
-    { id:7,  name:'Armored Vanguard',    env:'daytime',     diff:'medium', cardId:'supply_officer' },
-    { id:8,  name:'Greenhouse Stand',    env:'daytime',     diff:'medium', cardId:'sharpshooter' },
-    { id:9,  name:'Leaper Assault',      env:'daytime',     diff:'hard',   cardId:'field_medic_early' },
-    { id:10, name:'Day Garden Finale',   env:'daytime',     diff:'hard',   cardId:'machine_gunner',     digitalBriefing:true },
+    { id:5,  name:'Backyard Rush',       env:'daytime',     diff:'easy',     cardId:'drummer_boy',        creatorBitos:true },
+    { id:6,  name:'The Fence Line',      env:'daytime',     diff:'easy',     cardId:'field_cannon' },
+    { id:7,  name:'Armored Vanguard',    env:'daytime',     diff:'moderate', cardId:'supply_officer' },
+    { id:8,  name:'Greenhouse Stand',    env:'daytime',     diff:'moderate', cardId:'sharpshooter' },
+    { id:9,  name:'Leaper Assault',      env:'daytime',     diff:'moderate', cardId:'field_medic_early' },
+    { id:10, name:'Day Garden Finale',   env:'daytime',     diff:'moderate', cardId:'machine_gunner',     digitalBriefing:true },
     // Nighttime (11-20)
-    { id:11, name:'Darkness Falls',      env:'nighttime',   diff:'medium', cardId:'night_rifleman' },
-    { id:12, name:'Shadow Scouts',       env:'nighttime',   diff:'medium', cardId:'scout' },
-    { id:13, name:'Night Patrol',        env:'nighttime',   diff:'medium', cardId:'flare_operator' },
-    { id:14, name:'Ambush at Dusk',      env:'nighttime',   diff:'hard',   cardId:'trench_soldier' },
-    { id:15, name:'Shield Wall Night',   env:'nighttime',   diff:'hard',   cardId:'searchlight_operator', creatorBitos:true },
-    { id:16, name:'Midnight Siege',      env:'nighttime',   diff:'hard',   cardId:'radio_operator' },
-    { id:17, name:'Signal Disruption',   env:'nighttime',   diff:'hard',   cardId:'armored_soldier' },
-    { id:18, name:'Night Stalkers',      env:'nighttime',   diff:'hard',   cardId:'night_medic' },
-    { id:19, name:'Infiltration',        env:'nighttime',   diff:'expert', cardId:'sniper' },
-    { id:20, name:'Night Finale',        env:'nighttime',   diff:'expert', cardId:'recon_unit',          digitalBriefing:true },
+    { id:11, name:'Darkness Falls',      env:'nighttime',   diff:'moderate', cardId:'night_rifleman' },
+    { id:12, name:'Shadow Scouts',       env:'nighttime',   diff:'moderate', cardId:'scout' },
+    { id:13, name:'Night Patrol',        env:'nighttime',   diff:'moderate', cardId:'flare_operator' },
+    { id:14, name:'Ambush at Dusk',      env:'nighttime',   diff:'moderate', cardId:'trench_soldier' },
+    { id:15, name:'Shield Wall Night',   env:'nighttime',   diff:'medium', cardId:'searchlight_operator', creatorBitos:true },
+    { id:16, name:'Midnight Siege',      env:'nighttime',   diff:'medium', cardId:'radio_operator' },
+    { id:17, name:'Signal Disruption',   env:'nighttime',   diff:'medium', cardId:'armored_soldier' },
+    { id:18, name:'Night Stalkers',      env:'nighttime',   diff:'medium', cardId:'night_medic' },
+    { id:19, name:'Infiltration',        env:'nighttime',   diff:'medium', cardId:'sniper' },
+    { id:20, name:'Night Finale',        env:'nighttime',   diff:'medium', cardId:'recon_unit',          digitalBriefing:true },
     // Foggy (21-30)
     { id:21, name:'Rising Waters',       env:'foggy',       diff:'medium', cardId:'gas_mask_soldier' },
     { id:22, name:'Submerged Path',      env:'foggy',       diff:'medium', cardId:'mortar_team' },
-    { id:23, name:'Aquatic Assault',     env:'foggy',       diff:'hard',   cardId:'field_mechanic' },
+    { id:23, name:'Aquatic Assault',     env:'foggy',       diff:'medium', cardId:'field_mechanic' },
     { id:24, name:'Bog Defense',         env:'foggy',       diff:'hard',   cardId:'heavy_rifleman' },
     { id:25, name:'Colossus Emergence',  env:'foggy',       diff:'hard',   cardId:'forward_observer',    creatorBitos:true },
     { id:26, name:'Flood Surge',         env:'foggy',       diff:'hard',   cardId:'modern_rifleman' },
-    { id:27, name:'Waterlogged',         env:'foggy',       diff:'expert', cardId:'shield_operator' },
-    { id:28, name:'Delta Breach',        env:'foggy',       diff:'expert', cardId:'combat_medic' },
-    { id:29, name:'Tide of Aliens',      env:'foggy',       diff:'expert', cardId:'drone_operator' },
-    { id:30, name:'Foggy Finale',        env:'foggy',       diff:'expert', cardId:'rocket_specialist',   digitalBriefing:true },
+    { id:27, name:'Waterlogged',         env:'foggy',       diff:'hard', cardId:'shield_operator' },
+    { id:28, name:'Delta Breach',        env:'foggy',       diff:'hard', cardId:'combat_medic' },
+    { id:29, name:'Tide of Aliens',       env:'foggy',       diff:'hard', cardId:'drone_operator' },
+    { id:30, name:'Flooded Finale',       env:'foggy',       diff:'hard', cardId:'rocket_specialist',   digitalBriefing:true },
     // Rainy-Stormy (31-40)
     { id:31, name:'Storm Warning',       env:'rainy_stormy',diff:'hard',   cardId:'mobile_generator' },
     { id:32, name:'Lightning Assault',   env:'rainy_stormy',diff:'hard',   cardId:'plasma_tech_engineer' },
-    { id:33, name:'Thunder Line',        env:'rainy_stormy',diff:'expert', cardId:'grenadier' },
-    { id:34, name:'Tempest Defense',     env:'rainy_stormy',diff:'expert', cardId:'hazmat_trooper' },
-    { id:35, name:'Eye of the Storm',    env:'rainy_stormy',diff:'expert', cardId:'radiation_specialist', creatorBitos:true },
+    { id:33, name:'Thunder Line',       env:'rainy_stormy',diff:'hard',   cardId:'grenadier' },
+    { id:34, name:'Tempest Defense',    env:'rainy_stormy',diff:'hard',   cardId:'hazmat_trooper' },
+    { id:35, name:'Eye of the Storm',   env:'rainy_stormy',diff:'hard',   cardId:'radiation_specialist', creatorBitos:true },
     { id:36, name:'Storm Surge',         env:'rainy_stormy',diff:'expert', cardId:'plasma_soldier' },
     { id:37, name:'Hurricane Breach',    env:'rainy_stormy',diff:'expert', cardId:'energy_shield_generator' },
     { id:38, name:'Cyclone Defense',     env:'rainy_stormy',diff:'expert', cardId:'combat_drone' },
@@ -1516,7 +1528,7 @@ GW.ENVIRONMENTS = {
     { id:47, name:'Bio-Dome Breach',     env:'radioactive', diff:'expert', cardId:'repair_technician' },
     { id:48, name:'Command Sector',      env:'radioactive', diff:'expert', cardId:'ammo_specialist' },
     { id:49, name:'Overlord Approach',   env:'radioactive', diff:'expert', cardId:'plasma_shield_unit' },
-    { id:50, name:'FINAL MISSION',       env:'radioactive', diff:'expert', cardId:'plasma_cannon_warrior', isBossLevel:true, digitalBriefing:true },
+    { id:50, name:'FINAL MISSION',       env:'radioactive', diff:'impossible', cardId:'plasma_cannon_warrior', isBossLevel:true, digitalBriefing:true },
   ];
 
   levelData.forEach(d => {
@@ -1528,7 +1540,7 @@ GW.ENVIRONMENTS = {
       completed: false,
       difficulty: d.diff,
       startingEnergy: 0,
-      availableDefenders: ['plasma_energy_generator', 'fire_lance_gunner'],
+      availableDefenders: ['plasma_energy_generator', 'fire_lancer'],
       availableEnemies:   ['vex_drone'],
       sentinelAvailable:  true,
       reward: { cardId: d.cardId },
@@ -1543,24 +1555,24 @@ GW.ENVIRONMENTS = {
     };
   });
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  PROCEDURAL WAVE GENERATOR
   //  Generates wave[] data for levels 2-50, survival, endless, puzzle,
   //  mini-games.
   //
   //  TIMING RULES (from spec):
-  //  ─ Pre-wave / scout phase:  12–20s between individual alien spawns
-  //  ─ Assault wave:            15–30 aliens total, each 4–6s apart
-  //    (so never simultaneous — still staggered, feels like a surge)
-  //  ─ Between waves:           GW.WAVES.BETWEEN_WAVE_DELAY (12s)
+  //  â”€ Pre-wave / scout phase:  12â€“20s between individual alien spawns
+  //  â”€ Assault wave:            15â€“30 aliens total, each 4â€“6s apart
+  //    (so never simultaneous â€” still staggered, feels like a surge)
+  //  â”€ Between waves:           GW.WAVES.BETWEEN_WAVE_DELAY (12s)
   //
   //  ALIEN TYPE PROGRESSION by level tier:
-  //  ─ Easy     (L2–10):  bare, cap
-  //  ─ Medium   (L11–20): bare, cap, iron_mask, steel_helmet
-  //  ─ Hard     (L21–30): steel_helmet, armored_vest, shield
-  //  ─ Expert   (L31–40): heavy_helmet, full_armor, riot_shield
-  //  ─ Extreme  (L41–50): riot_shield, tactical_armor + specials
-  // ═══════════════════════════════════════════════════════════════════════════
+  //  â”€ Easy     (L2â€“10):  bare, cap
+  //  â”€ Medium   (L11â€“20): bare, cap, iron_mask, steel_helmet
+  //  â”€ Hard     (L21â€“30): steel_helmet, armored_vest, shield
+  //  â”€ Expert   (L31â€“40): heavy_helmet, full_armor, riot_shield
+  //  â”€ Extreme  (L41â€“50): riot_shield, tactical_armor + specials
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   /**
    * Returns an equipment tier pool for a given level id.
@@ -1579,7 +1591,7 @@ GW.ENVIRONMENTS = {
     if (levelId <= 40) return [['heavy_helmet',1],['full_armor',2],['riot_shield',2],['tactical_armor',1]];
     if (levelId <= 44) return [['full_armor',1],['riot_shield',2],['tactical_armor',3]];
     if (levelId <= 48) return [['riot_shield',2],['tactical_armor',4]];
-    return [['tactical_armor',1]]; // L49-50 — pure tactical
+    return [['tactical_armor',1]]; // L49-50 â€” pure tactical
   }
 
   /** Pick a random equipment id from a weighted pool. Uses a simple seeded index. */
@@ -1597,7 +1609,7 @@ GW.ENVIRONMENTS = {
    * Pick a pseudo-random lane from 1-5 using a simple hash.
    *
    * BUG FIX: The original LCG used multiplier 1664525 which is evenly
-   * divisible by 5, so (seed * 1664525) % 5 === 0 for every seed — meaning
+   * divisible by 5, so (seed * 1664525) % 5 === 0 for every seed â€” meaning
    * every alien spawned in the same lane (lane 4).
    *
    * Fix: use a multiplier that is NOT a multiple of 5, combined with a
@@ -1612,7 +1624,7 @@ GW.ENVIRONMENTS = {
 
   /**
    * Scout delay: cumulative ms from wave start.
-   * Each scout gets a 12–20s individual gap from the previous.
+   * Each scout gets a 12â€“20s individual gap from the previous.
    * Uses deterministic pseudo-random (seed-based) so values are consistent.
    */
   function scoutDelays(count, seed) {
@@ -1646,40 +1658,39 @@ GW.ENVIRONMENTS = {
 
   /**
    * Build waves array for a level.
-   * @param {number} levelId   — for pool selection
-   * @param {number} difficulty — 0=easy 1=medium 2=hard 3=expert 4=extreme
+   * @param {number} levelId   â€” for pool selection
+  * @param {number} difficulty â€” 0=easy 1=moderate 2=medium 3=hard 4=expert 5=impossible
    * @param {boolean} isBoss
    */
   function buildLevelWaves(levelId, difficulty, isBoss) {
     const pool = equipPoolForLevel(levelId);
     const seed = levelId * 31337;
 
-    // Scout count scales with difficulty: 6-8 easy, 8-10 medium, 10-12 hard+
-    const scoutCounts = [6, 8, 9, 10, 12];
-    const scoutCount = scoutCounts[Math.min(difficulty, 4)];
+    // Scout count scales with difficulty from Easy through the boss tier.
+    const scoutCounts = [6, 8, 10, 12, 14, 18];
+    const scoutCount = scoutCounts[Math.min(difficulty, 5)];
 
-    // Base assault size per difficulty tier — scales up within each tier by level.
+    // Base assault size per difficulty tier â€” scales up within each tier by level.
     // Within a 10-level tier, the first level gets the BASE, the last gets BASE+tier_growth.
     // This ensures L2 (easy tier start) has ~5-6 in final wave, while L10 (easy tier end)
     // has ~15, and the scale keeps climbing through all 5 environments.
-    const assaultBases  = [5,  8, 12, 18, 24];   // first level of each tier
-    const assaultMaxes  = [15, 18, 22, 26, 30];   // last level of each tier (unchanged max)
-    const diff          = Math.min(difficulty, 4);
+    const assaultBases  = [5, 8, 12, 18, 24, 32];
+    const assaultMaxes  = [15, 18, 22, 26, 30, 42];
+    const diff          = Math.min(difficulty, 5);
     // Position within this difficulty tier (0.0 = first level, 1.0 = last level)
-    // Difficulty tiers roughly: easy 2-4, medium 5-9, hard 10-19, expert 20-39, extreme 40-50
-    // Use levelId to interpolate within the tier.
-    const tierRanges = [[2,4],[5,9],[10,19],[20,39],[40,50]];
+    // Use the configured global campaign bands to interpolate within each tier.
+    const tierRanges = [[1,6],[7,14],[15,23],[24,35],[36,49],[50,50]];
     const [tierMin, tierMax] = tierRanges[diff] || [1, 50];
     const tierPct = Math.max(0, Math.min(1, (levelId - tierMin) / Math.max(1, tierMax - tierMin)));
     const assaultSize = Math.round(assaultBases[diff] + tierPct * (assaultMaxes[diff] - assaultBases[diff]));
 
     // Number of full assault waves: 1 easy, 2 medium, 3+ hard
-    const waveCounts = [1, 2, 3, 3, 4];
+    const waveCounts = [1, 2, 2, 3, 4, 5];
     const numWaves = waveCounts[diff];
 
     const waves = [];
 
-    // ── Pre-wave scouts ──────────────────────────────────────────────────────
+    // â”€â”€ Pre-wave scouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const preDelays = scoutDelays(scoutCount, seed);
     const preEnemies = preDelays.map(function(delay, i) {
       return {
@@ -1691,14 +1702,16 @@ GW.ENVIRONMENTS = {
     });
     waves.push({ id: 'pre_wave', label: 'ADVANCE SCOUTS', enemies: preEnemies });
 
-    // ── Assault waves ────────────────────────────────────────────────────────
+    // â”€â”€ Assault waves â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     for (let w = 0; w < numWaves; w++) {
       const isFinal  = w === numWaves - 1;
       const waveSeed = seed + (w + 1) * 99991;
-      const waveSize = isFinal && difficulty >= 2 ? assaultSize + 5 : assaultSize;
+      const baseWaveSize = isFinal && difficulty >= 2 ? assaultSize + 5 : assaultSize;
+      const isHorde = isFinal && baseWaveSize >= 20;
+      const waveSize = isHorde ? Math.min(30, Math.max(20, baseWaveSize)) : baseWaveSize;
       const delays   = assaultDelays(waveSize, waveSeed);
 
-      // Pick enemy type — last 2-3 slots get flag bearers on final/penultimate waves
+      // Pick enemy type â€” last 2-3 slots get flag bearers on final/penultimate waves
       const enemies = delays.map(function(delay, i) {
         const isFlag = (isFinal || w === numWaves - 2) && i >= waveSize - 2;
         return {
@@ -1714,6 +1727,8 @@ GW.ENVIRONMENTS = {
         label:       isFinal ? 'FINAL WAVE' : (w === 0 ? 'FIRST WAVE' : 'WAVE ' + (w + 1)),
         isMajorWave: true,
         isFinalWave: isFinal,
+        isHorde:     isHorde,
+        warningDelay: isHorde ? 3000 : undefined,
         enemies:     enemies,
       });
 
@@ -1734,7 +1749,7 @@ GW.ENVIRONMENTS = {
       }
     }
 
-    // ── Boss wave (level 50 only) ────────────────────────────────────────────
+    // â”€â”€ Boss wave (level 50 only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (isBoss) {
       const bossDelays = assaultDelays(10, seed + 888888);
       waves.push({
@@ -1753,13 +1768,13 @@ GW.ENVIRONMENTS = {
     return waves;
   }
 
-  // ── Difficulty mapping ────────────────────────────────────────────────────
-  const diffMap = { easy: 0, medium: 1, hard: 2, expert: 3, extreme: 4 };
+  // â”€â”€ Difficulty mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const diffMap = { easy: 0, moderate: 1, medium: 2, hard: 3, expert: 4, impossible: 5, extreme: 5 };
 
-  // ── Assign waves to ALL levels 2-50 ──────────────────────────────────────
+  // â”€â”€ Assign waves to ALL levels 2-50 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (let id = 2; id <= 50; id++) {
     if (!L[id]) continue;
-    const diff = diffMap[L[id].difficulty] || 0;
+    const diff = diffMap[L[id].difficulty] ?? 0;
     L[id].waves = buildLevelWaves(id, diff, !!L[id].isBossLevel);
     // Update available enemies pool based on level tier
     if (id >= 41) L[id].availableEnemies = ['vex_drone','vex_elite','vex_colossus','vex_overlord'];
@@ -1769,7 +1784,7 @@ GW.ENVIRONMENTS = {
     else               L[id].availableEnemies = ['vex_drone','vex_runner'];
   }
 
-  // ── Survival mode wave sets ───────────────────────────────────────────────
+  // â”€â”€ Survival mode wave sets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Survival modes use the same generator but at expert difficulty
   // and cycle indefinitely (handled by WaveManager when waves[] repeats).
   GW.SURVIVAL_WAVE_SETS = {};
@@ -1784,7 +1799,7 @@ GW.ENVIRONMENTS = {
     });
   }
 
-  // ── Mini-game wave sets ────────────────────────────────────────────────────
+  // â”€â”€ Mini-game wave sets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   GW.MINIGAME_WAVE_SETS = {};
   if (typeof GW.MINIGAMES !== 'undefined') {
     GW.MINIGAMES.forEach(function(mg, idx) {
@@ -1793,7 +1808,7 @@ GW.ENVIRONMENTS = {
     });
   }
 
-  // ── Puzzle wave sets ───────────────────────────────────────────────────────
+  // â”€â”€ Puzzle wave sets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   GW.PUZZLE_WAVE_SETS = {};
   if (typeof GW.PUZZLES !== 'undefined') {
     GW.PUZZLES.forEach(function(pz, idx) {
@@ -1802,69 +1817,69 @@ GW.ENVIRONMENTS = {
     });
   }
 
-  // ── Endless mode base wave set ─────────────────────────────────────────────
+  // â”€â”€ Endless mode base wave set â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Endless starts at medium and scales; base template for wave 1
   GW.ENDLESS_BASE_WAVES = buildLevelWaves(15, 1, false);
 
   GW.LEVELS = L;
 })();
 
-// ─── Mini-Games / Puzzle / Survival / Endless ─────────────────────────────────
+// â”€â”€â”€ Mini-Games / Puzzle / Survival / Endless â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.MINIGAMES = [
-  { id:'rapid_defense',  name:'Rapid Defense',     icon:'⚡', unlocked:false, description:'Survive waves with limited placement time.' },
-  { id:'target_range',   name:'Alien Target Range', icon:'🎯', unlocked:false, description:'Shoot alien targets. Time challenge.' },
-  { id:'energy_rush',    name:'Energy Rush',        icon:'🔋', unlocked:false, description:'Collect as much Plasma as possible in 60s.' },
-  { id:'lane_switch',    name:'Lane Switch',        icon:'↔️', unlocked:false, description:'Aliens switch lanes. Adapt your defense.' },
-  { id:'last_stand',     name:'Last Stand',         icon:'🛡', unlocked:false, description:'Hold with limited defenders. 10 waves.' },
-  { id:'escort',         name:'Escort Mission',     icon:'🚶', unlocked:false, description:'Protect a moving supply convoy.' },
-  { id:'resource_rush',  name:'Resource Challenge', icon:'💎', unlocked:false, description:'No orbs. Kill rewards only.' },
-  { id:'precision',      name:'Precision Shooting', icon:'🎖', unlocked:false, description:'Only precision shots count.' },
-  { id:'relay',          name:'Defense Relay',      icon:'📡', unlocked:false, description:'3 boards back-to-back.' },
-  { id:'alien_hunt',     name:'Alien Hunt',         icon:'👾', unlocked:false, description:'Special aliens scatter across lanes.' },
-  { id:'minimal',        name:'Minimal Defense',    icon:'⚗', unlocked:false, description:'Only 2 defenders. Placement is everything.' },
-  { id:'speed_run',      name:'Speed Run',          icon:'⏱', unlocked:false, description:'Clear all waves as fast as possible.' },
-  { id:'tank_mode',      name:'Tank Mode',          icon:'🛡', unlocked:false, description:'Enemies have 10x health.' },
-  { id:'fog_mini',       name:'Fog Assault',        icon:'🌫', unlocked:false, description:'Dense fog. React to hints.' },
-  { id:'blitz',          name:'Blitz',              icon:'💥', unlocked:false, description:'Aliens from both sides.' },
-  { id:'sniper_only',    name:'Sniper Only',        icon:'🔭', unlocked:false, description:'Long-range only.' },
-  { id:'no_regen',       name:'Iron Budget',        icon:'💰', unlocked:false, description:'No generators. Starting plasma only.' },
-  { id:'survival_mini',  name:'Quick Survival',     icon:'🌊', unlocked:false, description:'5-minute unlimited waves.' },
-  { id:'boss_rush',      name:'Boss Preview',       icon:'👹', unlocked:false, description:'Mini-boss variants in sequence.' },
-  { id:'free_play',      name:'Free Play',          icon:'🎮', unlocked:true,  description:'Level 1 with no restrictions.' },
+  { id:'rapid_defense',  name:'Rapid Defense',     icon:'âš¡', unlocked:false, description:'Survive waves with limited placement time.' },
+  { id:'target_range',   name:'Alien Target Range', icon:'ðŸŽ¯', unlocked:false, description:'Shoot alien targets. Time challenge.' },
+  { id:'energy_rush',    name:'Energy Rush',        icon:'ðŸ”‹', unlocked:false, description:'Collect as much Plasma as possible in 60s.' },
+  { id:'lane_switch',    name:'Lane Switch',        icon:'â†”ï¸', unlocked:false, description:'Aliens switch lanes. Adapt your defense.' },
+  { id:'last_stand',     name:'Last Stand',         icon:'ðŸ›¡', unlocked:false, description:'Hold with limited defenders. 10 waves.' },
+  { id:'escort',         name:'Escort Mission',     icon:'ðŸš¶', unlocked:false, description:'Protect a moving supply convoy.' },
+  { id:'resource_rush',  name:'Resource Challenge', icon:'ðŸ’Ž', unlocked:false, description:'No orbs. Kill rewards only.' },
+  { id:'precision',      name:'Precision Shooting', icon:'ðŸŽ–', unlocked:false, description:'Only precision shots count.' },
+  { id:'relay',          name:'Defense Relay',      icon:'ðŸ“¡', unlocked:false, description:'3 boards back-to-back.' },
+  { id:'alien_hunt',     name:'Alien Hunt',         icon:'ðŸ‘¾', unlocked:false, description:'Special aliens scatter across lanes.' },
+  { id:'minimal',        name:'Minimal Defense',    icon:'âš—', unlocked:false, description:'Only 2 defenders. Placement is everything.' },
+  { id:'speed_run',      name:'Speed Run',          icon:'â±', unlocked:false, description:'Clear all waves as fast as possible.' },
+  { id:'tank_mode',      name:'Tank Mode',          icon:'ðŸ›¡', unlocked:false, description:'Enemies have 10x health.' },
+  { id:'fog_mini',       name:'Fog Assault',        icon:'ðŸŒ«', unlocked:false, description:'Dense fog. React to hints.' },
+  { id:'blitz',          name:'Blitz',              icon:'ðŸ’¥', unlocked:false, description:'Aliens from both sides.' },
+  { id:'sniper_only',    name:'Sniper Only',        icon:'ðŸ”­', unlocked:false, description:'Long-range only.' },
+  { id:'no_regen',       name:'Iron Budget',        icon:'ðŸ’°', unlocked:false, description:'No generators. Starting plasma only.' },
+  { id:'survival_mini',  name:'Quick Survival',     icon:'ðŸŒŠ', unlocked:false, description:'5-minute unlimited waves.' },
+  { id:'boss_rush',      name:'Boss Preview',       icon:'ðŸ‘¹', unlocked:false, description:'Mini-boss variants in sequence.' },
+  { id:'free_play',      name:'Free Play',          icon:'ðŸŽ®', unlocked:true,  description:'Level 1 with no restrictions.' },
 ];
 
 GW.PUZZLES = [
-  { id:'p01', name:'First Puzzle',      icon:'🧩', unlocked:false, description:'Place 3 defenders to stop all aliens.' },
-  { id:'p02', name:'Energy Puzzle',     icon:'⚡', unlocked:false, description:'No generators. Use 75 Plasma to win.' },
-  { id:'p03', name:'Single Lane',       icon:'➡️', unlocked:false, description:'All aliens in Lane 3. Stop with 2 units.' },
-  { id:'p04', name:'Timing Challenge',  icon:'⏰', unlocked:false, description:'Placement locked after 5 seconds.' },
-  { id:'p05', name:'Shield Breaker',    icon:'🛡', unlocked:false, description:'Shield aliens only. Find the counter.' },
-  { id:'p06', name:'Leaper Logic',      icon:'🦘', unlocked:false, description:'Leapers bypass front row.' },
-  { id:'p07', name:'Fog Logic',         icon:'🌫', unlocked:false, description:'Limited visibility.' },
-  { id:'p08', name:'Five Lane Perfect', icon:'5️⃣', unlocked:false, description:'Cover all 5 lanes on a budget.' },
-  { id:'p09', name:'No Combat',         icon:'🚫', unlocked:false, description:'Support only. Use the Sentinel.' },
-  { id:'p10', name:'Low HP Puzzle',     icon:'❤️', unlocked:false, description:'Defenders start at 10 HP.' },
-  { id:'p11', name:'Lane Swap',         icon:'🔀', unlocked:false, description:'Aliens switch lanes each wave.' },
-  { id:'p12', name:'Speed Puzzle',      icon:'💨', unlocked:false, description:'Fast aliens only.' },
-  { id:'p13', name:'Dense Formation',   icon:'👾', unlocked:false, description:'Massive groups. Need splash damage.' },
-  { id:'p14', name:'Minimal Budget',    icon:'💎', unlocked:false, description:'100 Plasma total. No generators.' },
-  { id:'p15', name:'Multi-Role',        icon:'🎭', unlocked:false, description:'Must use offense, support, medic.' },
-  { id:'p16', name:'Boss Puzzle',       icon:'👹', unlocked:false, description:'One boss alien. Limited resources.' },
-  { id:'p17', name:'Blind Shot',        icon:'👁',  unlocked:false, description:'No HP bars visible.' },
-  { id:'p18', name:'The Final Puzzle',  icon:'🏆', unlocked:false, description:'All mechanics combined.' },
+  { id:'p01', name:'First Puzzle',      icon:'ðŸ§©', unlocked:false, description:'Place 3 defenders to stop all aliens.' },
+  { id:'p02', name:'Energy Puzzle',     icon:'âš¡', unlocked:false, description:'No generators. Use 75 Plasma to win.' },
+  { id:'p03', name:'Single Lane',       icon:'âž¡ï¸', unlocked:false, description:'All aliens in Lane 3. Stop with 2 units.' },
+  { id:'p04', name:'Timing Challenge',  icon:'â°', unlocked:false, description:'Placement locked after 5 seconds.' },
+  { id:'p05', name:'Shield Breaker',    icon:'ðŸ›¡', unlocked:false, description:'Shield aliens only. Find the counter.' },
+  { id:'p06', name:'Leaper Logic',      icon:'ðŸ¦˜', unlocked:false, description:'Leapers bypass front row.' },
+  { id:'p07', name:'Fog Logic',         icon:'ðŸŒ«', unlocked:false, description:'Limited visibility.' },
+  { id:'p08', name:'Five Lane Perfect', icon:'5ï¸âƒ£', unlocked:false, description:'Cover all 5 lanes on a budget.' },
+  { id:'p09', name:'No Combat',         icon:'ðŸš«', unlocked:false, description:'Support only. Use the Sentinel.' },
+  { id:'p10', name:'Low HP Puzzle',     icon:'â¤ï¸', unlocked:false, description:'Defenders start at 10 HP.' },
+  { id:'p11', name:'Lane Swap',         icon:'ðŸ”€', unlocked:false, description:'Aliens switch lanes each wave.' },
+  { id:'p12', name:'Speed Puzzle',      icon:'ðŸ’¨', unlocked:false, description:'Fast aliens only.' },
+  { id:'p13', name:'Dense Formation',   icon:'ðŸ‘¾', unlocked:false, description:'Massive groups. Need splash damage.' },
+  { id:'p14', name:'Minimal Budget',    icon:'ðŸ’Ž', unlocked:false, description:'100 Plasma total. No generators.' },
+  { id:'p15', name:'Multi-Role',        icon:'ðŸŽ­', unlocked:false, description:'Must use offense, support, medic.' },
+  { id:'p16', name:'Boss Puzzle',       icon:'ðŸ‘¹', unlocked:false, description:'One boss alien. Limited resources.' },
+  { id:'p17', name:'Blind Shot',        icon:'ðŸ‘',  unlocked:false, description:'No HP bars visible.' },
+  { id:'p18', name:'The Final Puzzle',  icon:'ðŸ†', unlocked:false, description:'All mechanics combined.' },
 ];
 
 GW.SURVIVAL_MODES = [
-  { id:'sv_daytime',   name:'Daytime',       icon:'☀️', unlocked:true,  env:'daytime',     description:'Survive in daylight. Classic invasion.' },
-  { id:'sv_nighttime', name:'Nighttime',     icon:'🌙', unlocked:false, env:'nighttime',   description:'Night survival. Limited visibility.' },
-  { id:'sv_foggy',     name:'Foggy',         icon:'🌫', unlocked:false, env:'foggy',       description:'Dense fog. Recon essential.' },
-  { id:'sv_storm',     name:'Storm',         icon:'⛈', unlocked:false, env:'rainy_stormy',description:'Storm conditions. Brutal.' },
-  { id:'sv_radio',     name:'Radioactive',   icon:'☢️', unlocked:false, env:'radioactive', description:'Contaminated zone. Mutated aliens.' },
-  { id:'sv_winter',    name:'Winter',        icon:'❄️', unlocked:false, env:'winter',      description:'Winter mini-game environment.' },
-  { id:'sv_spaceship', name:'Alien Vessel',  icon:'🚀', unlocked:false, env:'spaceship',   description:'Aboard the enemy ship.' },
-  { id:'sv_heavy',     name:'Heavy Assault', icon:'⚔️', unlocked:false, env:'daytime',     description:'Armored and brute aliens only.' },
-  { id:'sv_boss_rush', name:'Boss Rush',     icon:'👹', unlocked:false, env:'spaceship',   description:'Consecutive boss-class enemies.' },
-  { id:'sv_last_stand',name:'Last Stand',    icon:'🛡', unlocked:false, env:'rainy_stormy',description:'All lanes assault simultaneously.' },
+  { id:'sv_daytime',   name:'Daytime',       icon:'â˜€ï¸', unlocked:true,  env:'daytime',     description:'Survive in daylight. Classic invasion.' },
+  { id:'sv_nighttime', name:'Nighttime',     icon:'ðŸŒ™', unlocked:false, env:'nighttime',   description:'Night survival. Limited visibility.' },
+  { id:'sv_foggy',     name:'Flooded',       icon:'ðŸŒŠ', unlocked:false, env:'foggy',       description:'Flooded basin. Defend the submerged lanes.' },
+  { id:'sv_storm',     name:'Storm',         icon:'â›ˆ', unlocked:false, env:'rainy_stormy',description:'Storm conditions. Brutal.' },
+  { id:'sv_radio',     name:'Radioactive',   icon:'â˜¢ï¸', unlocked:false, env:'radioactive', description:'Contaminated zone. Mutated aliens.' },
+  { id:'sv_winter',    name:'Winter',        icon:'â„ï¸', unlocked:false, env:'winter',      description:'Winter mini-game environment.' },
+  { id:'sv_spaceship', name:'Alien Vessel',  icon:'ðŸš€', unlocked:false, env:'spaceship',   description:'Aboard the enemy ship.' },
+  { id:'sv_heavy',     name:'Heavy Assault', icon:'âš”ï¸', unlocked:false, env:'daytime',     description:'Armored and brute aliens only.' },
+  { id:'sv_boss_rush', name:'Boss Rush',     icon:'ðŸ‘¹', unlocked:false, env:'spaceship',   description:'Consecutive boss-class enemies.' },
+  { id:'sv_last_stand',name:'Last Stand',    icon:'ðŸ›¡', unlocked:false, env:'rainy_stormy',description:'All lanes assault simultaneously.' },
 ];
 
 GW.ENDLESS = {
@@ -1880,26 +1895,26 @@ GW.ENDLESS = {
   },
 };
 
-// ─── Game Modes ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Game Modes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.GAME_MODES = {
   adventure:          { id:'adventure',          name:'Adventure',          unlocked:true },
   survival:           { id:'survival',           name:'Survival / Endless', unlocked:false },
   minigames:          { id:'minigames',           name:'Mini-Games',         unlocked:false },
   puzzle:             { id:'puzzle',             name:'Puzzle',             unlocked:false },
   characters_profile: { id:'characters_profile', name:'Characters Profile', unlocked:false },
-  extras:             { id:'extras',             name:'Extras',             unlocked:false },
+  extras:             { id:'extras',             name:'Extras',             unlocked:true  },
   settings:           { id:'settings',           name:'Settings',           unlocked:true },
   credits:            { id:'credits',            name:'Credits',            unlocked:true },
 };
 
-// ─── Progression Schema ───────────────────────────────────────────────────────
+// â”€â”€â”€ Progression Schema â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.PROGRESSION_SCHEMA = {
   version:          2,
   playerName:       '',
   isNewPlayer:      true,
   currentLevel:     1,
   completedLevels:  [],
-  claimedCards:     ['plasma_energy_generator', 'fire_lance_gunner'],
+  claimedCards:     ['plasma_energy_generator', 'fire_lancer'],
   discoveredEnemies:['vex_drone'],
   unlockedModes:    ['adventure', 'settings', 'credits'],
   unlockedEnvs:     ['daytime'],
@@ -1907,34 +1922,42 @@ GW.PROGRESSION_SCHEMA = {
   bestSurvivalScores: {},
   bestEndlessWave:  0,
   bestEndlessScore: 0,
-  settings: { sfxVolume: 0.8, musicVolume: 0.6, showTips: true, pixelArt: true },
+  settings: {
+    sfxVolume: 0.8, musicVolume: 0.6, showTips: true, pixelArt: true,
+    resolution: 'standard', graphicsQuality: 'balanced', textureQuality: 'crisp', modelQuality: 'high',
+  },
 };
 
-// ─── Asset Registry ───────────────────────────────────────────────────────────
-// ─── Asset Paths (deployment-safe web paths) ─────────────────────────────────
+// â”€â”€â”€ Asset Registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ Asset Paths (deployment-safe web paths) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // All paths are root-relative (/assets/...) and work identically
 // on localhost AND on any production server.
 // Filenames are lowercase to match Linux/production filesystem case-sensitivity.
 GW.ASSETS = {
-  // ── Sprite paths ─────────────────────────────────────────────────────────
-  // Currently null — game uses procedural Phaser graphics.
+  // â”€â”€ Sprite paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Currently null â€” game uses procedural Phaser graphics.
   // When real sprite sheets arrive, replace null with the path string.
   // Example: plasma_energy_generator: "/assets/sprites/characters/player/plasma_energy_generator.svg"
   SPRITES: {
     plasma_energy_generator: "/assets/sprites/characters/player/plasma_energy_generator.svg",
-    fire_lance_gunner:       "/assets/sprites/characters/player/fire_lance_gunner.svg",
-    vex_drone:               "/assets/sprites/enemies/basic/vex_drone.svg",
-    vex_flag_bearer:         "/assets/sprites/enemies/basic/vex_flag_bearer.svg",
+    fire_lancer:             "/assets/sprites/characters/player/fire_lancer.svg",
+    vex_drone:               "/assets/sprites/characters/enemy/vex_drone.svg",
+    vex_flag_bearer:         "/assets/sprites/characters/enemy/vex_flag_bearer.svg",
     sentinel:                null,  // sentinel uses procedural graphics
     creator_bitos:           null,  // Creator Bitos uses procedural graphics
   },
 
-  // ── Audio paths ───────────────────────────────────────────────────────────
+  // Full sprite-sheet roster manifest (generated by tools/generate-sprite-sheets.js).
+  // 52 player sheets + 51 enemy sheets, each a labelled IDLE/WALK/ATTACK/
+  // HURT/DEATH animation grid. Fetched lazily when a scene needs a sheet.
+  SPRITE_MANIFEST: "/assets/sprites/sprite-manifest.json",
+
+  // â”€â”€ Audio paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Paths to audio assets. OGG primary (open, compact), MP3 fallback.
   // null = file not yet available; the audio manager skips null entries.
-  // Five battle themes — one per environment (daytime/nighttime/foggy/storm/radioactive).
+  // Five battle themes â€” one per environment (daytime/nighttime/foggy/storm/radioactive).
   AUDIO: {
-    // ── Music ──────────────────────────────────────────────
+    // â”€â”€ Music â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     menuMusic:         '/assets/audio/music/menu-theme.ogg',
     loadingMusic:      '/assets/audio/music/loading-theme.ogg',
     battleDaytime:     '/assets/audio/music/battle-daytime.ogg',
@@ -1946,7 +1969,7 @@ GW.ASSETS = {
     defeatMusic:       '/assets/audio/music/defeat.ogg',
     briefingMusic:     '/assets/audio/music/briefing.ogg',
 
-    // ── SFX ────────────────────────────────────────────────
+    // â”€â”€ SFX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     fireLanceShoot:    '/assets/audio/sfx/fire-lance-shoot.ogg',
     plasmaShoot:       '/assets/audio/sfx/plasma-shoot.ogg',
     bulletShoot:       '/assets/audio/sfx/bullet-shoot.ogg',
@@ -1960,7 +1983,7 @@ GW.ASSETS = {
     hordeWarning:      '/assets/audio/sfx/horde-warning.ogg',
     explosion:         '/assets/audio/sfx/explosion.ogg',
 
-    // ── UI ─────────────────────────────────────────────────
+    // â”€â”€ UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     btnClick:          '/assets/audio/ui/btn-click.ogg',
     btnHover:          '/assets/audio/ui/btn-hover.ogg',
     menuOpen:          '/assets/audio/ui/menu-open.ogg',
@@ -1971,23 +1994,25 @@ GW.ASSETS = {
     deploy:            '/assets/audio/ui/deploy.ogg',
   },
 
-  // ── Background image paths ─────────────────────────────────────────────────
-  // Battlefield backgrounds per environment — SVG format, 960x600.
+  // â”€â”€ Background image paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Battlefield backgrounds per environment â€” SVG format, 960x600.
   // The battlefield currently renders via Phaser procedural graphics,
   // so these serve as reference / fallback background layers.
   BACKGROUNDS: {
     daytime:      "/assets/backgrounds/battlefield/daytime.svg",
     nighttime:    "/assets/backgrounds/battlefield/nighttime.svg",
-    foggy:        "/assets/backgrounds/battlefield/foggy.svg",
-    rainy_stormy: "/assets/backgrounds/battlefield/rainy_stormy.svg",
+    flooded:      "/assets/backgrounds/battlefield/flooded.svg",
+    storm:        "/assets/backgrounds/battlefield/storm.svg",
     radioactive:  "/assets/backgrounds/battlefield/radioactive.svg",
+    foggy:        "/assets/backgrounds/battlefield/flooded.svg",
+    rainy_stormy: "/assets/backgrounds/battlefield/storm.svg",
     menu:         "/assets/backgrounds/menu/menu-bg.svg",
     briefing:     "/assets/backgrounds/briefing/briefing-bg.svg",
     victory:      "/assets/backgrounds/victory/victory-bg.svg",
     defeat:       "/assets/backgrounds/defeat/defeat-bg.svg",
   },
 
-  // ── UI asset paths ─────────────────────────────────────────────────────────
+  // â”€â”€ UI asset paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   UI: {
     plasmaIcon:    "/assets/ui/hud/plasma-icon.svg",
     waveMarker:    "/assets/ui/hud/wave-marker.svg",
@@ -1999,7 +2024,7 @@ GW.ASSETS = {
     cardSlot:      "/assets/ui/panels/card-slot.svg",
   },
 
-  // ── Effect paths ───────────────────────────────────────────────────────────
+  // â”€â”€ Effect paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   EFFECTS: {
     hitSpark:      "/assets/sprites/effects/hit-spark.svg",
     deathBurst:    "/assets/sprites/effects/death-burst.svg",
@@ -2007,7 +2032,7 @@ GW.ASSETS = {
     spawnRing:     "/assets/sprites/effects/spawn-ring.svg",
   },
 
-  // ── Projectile paths ───────────────────────────────────────────────────────
+  // â”€â”€ Projectile paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   PROJECTILES: {
     fireLance: "/assets/sprites/projectiles/fire-lance-shot.svg",
     plasma:    "/assets/sprites/projectiles/plasma-shot.svg",
@@ -2015,7 +2040,7 @@ GW.ASSETS = {
   },
 };
 
-// ─── Scene Keys ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Scene Keys â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.SCENES = {
   BOOT:     'BootScene',
   INTRO:    'IntroScene',
@@ -2028,8 +2053,8 @@ GW.SCENES = {
   LOSE:     'LoseScene',
 };
 
-// ─── UI Colors ────────────────────────────────────────────────────────────────
-// CHRONO-FRONT: GALACTIC WAR — theme palette
+// â”€â”€â”€ UI Colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// CHRONO-FRONT: GALACTIC WAR â€” theme palette
 // Primary: cosmic amber/gold + galactic teal. Deep space backgrounds.
 GW.UI_COLORS = {
   TEXT_PRIMARY:    '#e8f0ff',   // near-white with blue tint
@@ -2037,7 +2062,7 @@ GW.UI_COLORS = {
   TEXT_ACCENT:     '#f59e0b',   // amber gold
   TEXT_DANGER:     '#ef4444',   // red (unchanged)
   TEXT_ALIEN:      '#c4b5fd',   // alien purple (unchanged)
-  GREEN_BRIGHT:    '#22d3ee',   // galactic teal — replaces garden green
+  GREEN_BRIGHT:    '#22d3ee',   // galactic teal â€” replaces garden green
   GREEN_GRASS:     '#06b6d4',   // deeper teal
   GREEN_MILITARY:  '#1d4ed8',   // military blue
   GREEN_DARK:      '#1e3a5f',   // dark navy
@@ -2045,7 +2070,7 @@ GW.UI_COLORS = {
   SKY_BLUE:        '#bfdbfe',   // light cosmic blue
   PLASMA:          '#a78bfa',   // plasma purple (unchanged)
   PLASMA_BRIGHT:   '#c4b5fd',   // plasma bright (unchanged)
-  GOLD:            '#f59e0b',   // amber gold — main accent
+  GOLD:            '#f59e0b',   // amber gold â€” main accent
   PANEL_BG:        '#040c18',   // deep space panel
   HEALTH_FULL:     '#22d3ee',   // teal health bar
   HEALTH_LOW:      '#ef4444',   // red low health (unchanged)

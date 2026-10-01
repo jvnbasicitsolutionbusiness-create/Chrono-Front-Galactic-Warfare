@@ -41,6 +41,9 @@ GW.SpriteAnimator = class SpriteAnimator {
     this.state  = 'idle';
     this._timer = null;
     this._fps   = 6;
+    this._qualityMultiplier = window.GWGraphics ? window.GWGraphics.getModelRate(
+      GW.progression && GW.progression.getSetting('modelQuality')
+    ) : 1;
   }
 
   play(state, fps) {
@@ -55,6 +58,13 @@ GW.SpriteAnimator = class SpriteAnimator {
     if (this._timer) { this._timer.remove(false); this._timer = null; }
   }
 
+  setQualityMultiplier(multiplier) {
+    const next = Math.max(0.25, Math.min(1, Number(multiplier) || 1));
+    if (next === this._qualityMultiplier) return;
+    this._qualityMultiplier = next;
+    if (this._timer) this._startTimer();
+  }
+
   _getDefaultFps(state) {
     return { idle: 3, walk: 6, attack: 8, hurt: 10, die: 6, deploy: 6 }[state] || 6;
   }
@@ -62,7 +72,7 @@ GW.SpriteAnimator = class SpriteAnimator {
   _startTimer() {
     if (this._timer) this._timer.remove(false);
     this._timer = this.scene.time.addEvent({
-      delay:         Math.round(1000 / this._fps),
+      delay:         Math.round(1000 / (this._fps * this._qualityMultiplier)),
       callback:      this._tick,
       callbackScope: this,
       loop:          true,
@@ -86,6 +96,16 @@ GW.SpriteAnimator = class SpriteAnimator {
 function _px(g, x, y, w, h, col, alpha) {
   g.fillStyle(col, alpha !== undefined ? alpha : 1);
   g.fillRect(x, y, w, h);
+}
+
+// Shade a hex colour: f<0 darkens toward black, f>0 lightens toward white (|f| 0..1).
+function _shade(hex, f) {
+  const r = (hex >> 16) & 0xff, gg = (hex >> 8) & 0xff, b = hex & 0xff;
+  const t = f < 0 ? 0 : 255, p = Math.min(1, Math.abs(f));
+  const nr = Math.round((t - r) * p) + r;
+  const ng = Math.round((t - gg) * p) + gg;
+  const nb = Math.round((t - b) * p) + b;
+  return (nr << 16) | (ng << 8) | nb;
 }
 
 
@@ -356,6 +376,11 @@ GW.SpriteRegistry.registerChar('fire_lance_gunner', (g, def, frame, state) => {
     g.fillRoundedRect(-14 + bx, -44 + by, 30, 72, 4);
   }
 });
+
+// v1.0.1: fire_lancer is the renamed id — register same draw function under new key
+GW.SpriteRegistry.registerChar('fire_lancer',
+  GW.SpriteRegistry.getCharDraw('fire_lance_gunner')
+);
 
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -742,31 +767,22 @@ GW.SpriteRegistry.registerEnemy('vex_drone', (g, def, frame, state) => {
   g.fillStyle(LIGHT, 0.7);
   g.fillCircle(laEndX - 1, laEndY - 1, 2);
 
-  // Right arm (extends for attack)
+  // Right arm — static, gripping the weapon stick.
+  // The stick itself is drawn/animated by the enemy's _stickGfx layer
+  // (pivot at ~18,5), so this arm no longer extends or glows on attack.
   const raBaseX = 10 + bx;
   const raBaseY = -1 + by;
-  const raEndX  = raBaseX + 20 + armExtR;
-  const raEndY  = raBaseY + 14 - armRaiseL * 0.3;
+  const raEndX  = 18 + bx;   // meets the stick pivot
+  const raEndY  =  5 + by;
   g.lineStyle(5, BODY, 1);
   g.beginPath(); g.moveTo(raBaseX, raBaseY); g.lineTo(raEndX, raEndY); g.strokePath();
   g.lineStyle(4, LIGHT, 0.6);
   g.beginPath(); g.moveTo(raBaseX, raBaseY); g.lineTo(raEndX, raEndY); g.strokePath();
-  // Right claw
+  // Gripping claw (holds the stick)
   g.fillStyle(CLAW, 1);
   g.fillCircle(raEndX, raEndY, 4.5);
   g.fillStyle(LIGHT, 0.7);
   g.fillCircle(raEndX - 1, raEndY - 1, 2);
-
-  // Attack energy at right claw (frames 4-7 of attack)
-  if (state === 'attack' && f8 >= 4 && armExtR > 6) {
-    const energyR = 4 + (f8 - 4) * 2.5;
-    g.fillStyle(CORE, 0.25);
-    g.fillCircle(raEndX, raEndY, energyR + 5);
-    g.fillStyle(CORE, 0.85);
-    g.fillCircle(raEndX, raEndY, energyR);
-    g.fillStyle(EYE, 0.75);
-    g.fillCircle(raEndX, raEndY, energyR * 0.45);
-  }
 
   // ── Neck (short, thick) ───────────────────────────────────────────────────
   g.fillStyle(BODY, 1);
@@ -1162,53 +1178,339 @@ GW.SpriteRegistry.registerEnemy('vex_flag_bearer', (g, def, frame, state) => {
 /** Default character — generic pixel soldier. */
 GW.SpriteRegistry.registerChar('_default_char', (g, def, frame, state) => {
   g.clear();
-  const c  = def.color       || 0x4d7c0f;
-  const ac = def.accentColor || 0xa3e635;
-  const sk = def.skinColor   || 0xd4956a;
-  const bob = (state === 'idle') ? Math.sin(frame * 0.8) * 2 : 0;
-  const atk = (state === 'attack' && frame % 4 < 2) ? 4 : 0;
 
-  g.fillStyle(0x000000, 0.18); g.fillEllipse(2, 30 + bob, 40, 9);
-  g.fillStyle(0x1c1008, 1);
-  g.fillRect(-11, 22 + bob, 9, 7); g.fillRect(3, 22 + bob, 9, 7);
-  g.fillStyle(c, 1);
-  g.fillRect(-10, 8 + bob, 9, 15); g.fillRect(2, 8 + bob, 9, 15);
-  g.fillStyle(0x1c1008, 1); g.fillRect(-11, 7 + bob, 23, 3);
-  g.fillStyle(c, 1); g.fillRoundedRect(-12, -13 + bob, 26, 22, 3);
-  g.fillStyle(c, 1); g.fillRect(12 + atk, -7 + bob, 13, 6);
-  g.fillStyle(0x374151, 1); g.fillRect(22 + atk, -6 + bob, 12, 4);
-  g.fillStyle(c, 1); g.fillRect(-17, -10 + bob, 7, 15);
-  g.fillStyle(sk, 1); g.fillRect(-3, -21 + bob, 8, 9);
-  g.fillStyle(sk, 1); g.fillRoundedRect(-9, -37 + bob, 19, 17, 4);
-  g.fillStyle(def.helmetColor || 0x365314, 1); g.fillRoundedRect(-10, -41 + bob, 21, 12, 5);
-  g.fillStyle(0x1f2937, 1);
-  g.fillRect(-6, -33 + bob, 3, 3); g.fillRect(3, -33 + bob, 3, 3);
-  if (state === 'attack' && frame % 4 === 0) {
-    g.fillStyle(0xfef08a, 0.9); g.fillCircle(35 + atk, -4 + bob, 7);
+  // ── Palette derived from the card def (matches reference pixel style) ────
+  const BODY   = def.color       || 0x4d7c0f;
+  const DARK   = _shade(BODY, -0.45);
+  const LIGHT  = _shade(BODY,  0.28);
+  const ACCENT = def.accentColor || 0xa3e635;
+  const SKIN   = def.skinColor   || 0xd4956a;
+  const HELMET = def.helmetColor || _shade(BODY, -0.25);
+  const BOOT   = 0x1c1008;
+  const IRON   = 0x6b7280;
+  const GLOW   = 0xfef08a;
+
+  // ── Archetype flags drive loadout silhouettes ────────────────────────────
+  const isSuicide = !!def.isSuicideUnit;
+  const isSupport = !isSuicide && (!!def.isSupport || def.role === 'energy' || def.role === 'support');
+  const hasGun    = !isSuicide && !isSupport && !!def.weapon;
+
+  // ── Per-state animation parameters ───────────────────────────────────────
+  let bob = 0, leanX = 0, recoil = 0, hurtX = 0, falling = 0, muzzle = 0, armSwing = 0;
+  const f8 = frame % 8;
+  switch (state) {
+    case 'idle':
+    case 'deploy': {
+      const b = frame % 6;
+      bob = b < 3 ? b * 0.6 : (6 - b) * 0.6;
+      break;
+    }
+    case 'walk':
+      bob   = Math.sin(frame * 0.9) * 2;
+      leanX = Math.sin(frame * 0.45) * 1.2;
+      armSwing = Math.sin(frame * 0.9 + Math.PI) * 3;
+      break;
+    case 'attack':
+      if (f8 < 2)       { recoil = -2;          leanX = -1.5; }
+      else if (f8 < 5)  { recoil = (f8 - 2) * 2.5; muzzle = 1; leanX = (f8 - 2); }
+      else              { recoil = Math.max(0, 8 - (f8 - 4) * 4); }
+      break;
+    case 'hurt': {
+      const hf = frame % 4;
+      hurtX = hf < 2 ? -(hf + 1) * 3 : -6 + (hf - 1) * 3;
+      bob   = 2;
+      break;
+    }
+    case 'die':
+      falling = Math.min(frame, 5) * 5;
+      break;
+  }
+  const bx = leanX + hurtX;
+  const by = bob + falling;
+
+  // ── Prone (defeated) ───────────────────────────────────────────────────────
+  if (state === 'die' && frame >= 4) {
+    g.fillStyle(0x000000, 0.22);
+    g.fillEllipse(2, 20, 54, 10);
+    _px(g, -22, 8, 44, 12, BODY, 0.85);          // body slumped
+    _px(g, -22, 4, 14, 10, SKIN, 0.85);          // head
+    _px(g, -28, 6, 12,  8, HELMET, 0.75);        // helmet knocked off
+    if (hasGun) _px(g, -14, 18, 40, 3, IRON, 0.7); // weapon on ground
+    return;
+  }
+
+  // ── Ground shadow ──────────────────────────────────────────────────────────
+  g.fillStyle(0x000000, 0.2);
+  g.fillEllipse(2 + bx, 28 + by, 38, 8);
+
+  // ── Boots ──────────────────────────────────────────────────────────────────
+  _px(g, -11 + bx, 18 + by, 9, 7, BOOT);
+  _px(g,   2 + bx, 18 + by, 9, 7, BOOT);
+  _px(g,  -9 + bx, 18 + by, 3, 2, _shade(BOOT, 0.25), 0.5);
+  _px(g,   4 + bx, 18 + by, 3, 2, _shade(BOOT, 0.25), 0.5);
+
+  // ── Legs (armoured greaves, alternate on walk) ─────────────────────────────
+  let lLeg = 0, rLeg = 0;
+  if (state === 'walk') {
+    lLeg = Math.sin(frame * 0.9) * 2;
+    rLeg = Math.sin(frame * 0.9 + Math.PI) * 2;
+  }
+  _px(g, -10 + bx, 6 + by + lLeg, 9, 13, BODY);
+  _px(g,   2 + bx, 6 + by + rLeg, 9, 13, BODY);
+  _px(g, -11 + bx, 9 + by + lLeg, 11, 3, DARK, 0.6);   // knee guards
+  _px(g,   1 + bx, 9 + by + rLeg, 11, 3, DARK, 0.6);
+  g.fillStyle(DARK, 0.5);
+  g.fillRect(-7 + bx, 6 + by + lLeg, 2, 11);
+  g.fillRect( 5 + bx, 6 + by + rLeg, 2, 11);
+
+  // ── Belt ───────────────────────────────────────────────────────────────────
+  _px(g, -12 + bx, 5 + by, 25, 3, _shade(BODY, -0.6));
+  g.fillStyle(ACCENT, 0.9); g.fillRect(-2 + bx, 5 + by, 5, 3);
+
+  // ── Torso armour ───────────────────────────────────────────────────────────
+  g.fillStyle(BODY, 1);
+  g.fillRoundedRect(-13 + bx, -14 + by, 27, 21, 3);
+  _px(g, -1  + bx, -13 + by, 3, 19, DARK, 0.6);      // centre ridge
+  _px(g, -13 + bx, -12 + by, 3, 17, LIGHT, 0.35);    // left bevel highlight
+  _px(g,  11 + bx, -12 + by, 3, 17, DARK, 0.5);      // right shade
+  g.fillStyle(ACCENT, 0.75); g.fillRect(-8 + bx, -9 + by, 5, 5); // chest emblem
+
+  // ── Shoulder plates ────────────────────────────────────────────────────────
+  g.fillStyle(DARK, 1);
+  g.fillRoundedRect( 12 + bx, -14 + by, 9, 10, 2);
+  g.fillRoundedRect(-20 + bx, -14 + by, 9, 10, 2);
+  g.fillStyle(LIGHT, 0.4); g.fillRect(13 + bx, -13 + by, 4, 3);
+
+  // ── Backpack: support antenna / suicide explosive ──────────────────────────
+  if (isSupport || isSuicide) {
+    _px(g, -23 + bx, -12 + by, 9, 16, _shade(BODY, -0.3));
+    if (isSuicide) {
+      _px(g, -22 + bx, -10 + by, 7, 12, 0x7f1d1d);
+      const blink = (frame % 6 < 3) ? 1 : 0.25;
+      g.fillStyle(0xef4444, blink); g.fillCircle(-18 + bx, -6 + by, 2.2);
+    } else {
+      g.lineStyle(1.5, ACCENT, 0.9);
+      g.beginPath(); g.moveTo(-19 + bx, -12 + by); g.lineTo(-21 + bx, -26 + by); g.strokePath();
+      g.fillStyle(ACCENT, 0.6 + Math.sin(frame * 0.8) * 0.3);
+      g.fillCircle(-21 + bx, -27 + by, 2.4);
+    }
+  }
+
+  // ── Left arm (passive) ─────────────────────────────────────────────────────
+  _px(g, -19 + bx, -10 + by + armSwing, 8, 14, BODY);
+  g.fillStyle(SKIN, 1); g.fillCircle(-15 + bx, 3 + by + armSwing, 3.5);
+
+  // ── Right arm (weapon arm, recoils on attack) ──────────────────────────────
+  const rax = Math.round(recoil * 0.3);
+  _px(g, 12 + bx + rax, -10 + by - armSwing, 10, 7, BODY);
+  g.fillStyle(SKIN, 1); g.fillCircle(20 + bx + rax, -6 + by - armSwing, 3.5);
+
+  if (hasGun) {
+    const gx = 18 + bx + recoil;
+    _px(g, gx,      -8 + by - armSwing, 20, 4, IRON);                 // barrel
+    _px(g, gx + 4,  -4 + by - armSwing,  5, 6, _shade(IRON, -0.4));   // grip
+    _px(g, gx + 18, -9 + by - armSwing,  5, 6, DARK);                 // muzzle block
+    if (muzzle) {
+      g.fillStyle(GLOW, 0.9);   g.fillCircle(gx + 27, -6 + by, 5);
+      g.fillStyle(ACCENT, 0.55); g.fillCircle(gx + 27, -6 + by, 8);
+    }
+  } else if (isSupport) {
+    const pulse = 0.5 + Math.sin(frame * 0.7) * 0.3;
+    g.fillStyle(ACCENT, pulse * 0.4); g.fillCircle(23 + bx, -5 + by, 8);
+    g.fillStyle(ACCENT, pulse);       g.fillCircle(23 + bx, -5 + by, 4);
+  } else if (!isSuicide) {
+    // Melee blade
+    _px(g, 20 + bx + recoil, -9 + by, 3, 16, IRON);
+    _px(g, 19 + bx + recoil, -11 + by, 5, 3, ACCENT);
+  }
+
+  // ── Neck + head ────────────────────────────────────────────────────────────
+  _px(g, -3 + bx, -23 + by, 7, 10, SKIN);
+  _px(g, -1 + bx, -23 + by, 2, 10, _shade(SKIN, -0.35), 0.4);
+  g.fillStyle(SKIN, 1); g.fillRoundedRect(-9 + bx, -39 + by, 19, 17, 4);
+  _px(g, -7 + bx, -35 + by, 15, 5, _shade(SKIN, -0.3), 0.35);  // brow shade
+  _px(g, -6 + bx, -34 + by, 3, 3, 0x1c1008);                   // eyes
+  _px(g,  3 + bx, -34 + by, 3, 3, 0x1c1008);
+
+  // ── Helmet ─────────────────────────────────────────────────────────────────
+  g.fillStyle(HELMET, 1); g.fillRoundedRect(-10 + bx, -44 + by, 21, 13, 5);
+  _px(g, -11 + bx, -33 + by, 23, 3, _shade(HELMET, -0.4));         // brow rim
+  g.fillStyle(_shade(HELMET, 0.3), 0.5); g.fillRect(-9 + bx, -43 + by, 3, 11); // bevel
+  _px(g, -1 + bx, -45 + by, 3, 6, ACCENT, 0.9);                    // crest
+
+  // ── Damage flash overlay ───────────────────────────────────────────────────
+  if (state === 'hurt' && frame % 2 === 0) {
+    g.fillStyle(0xffffff, 0.24);
+    g.fillRoundedRect(-14 + bx, -45 + by, 30, 73, 4);
   }
 });
 
-/** Default enemy — generic pixel alien. */
+/** Default enemy — detailed pixel alien matching the vex_drone reference style.
+ *  Silhouette varies by def.class (brute/fast/aerial/ranged/shield/stealth). */
 GW.SpriteRegistry.registerEnemy('_default_enemy', (g, def, frame, state) => {
   g.clear();
-  const c  = def.color       || 0x7c3aed;
-  const ac = def.accentColor || 0xc4b5fd;
-  const ec = def.eyeColor    || 0xe879f9;
-  const bob = (state === 'walk') ? Math.sin(frame * 1.2) * 2 : 0;
 
-  g.fillStyle(0x000000, 0.18); g.fillEllipse(0, 30 + bob, 44, 9);
-  g.lineStyle(2, c, 0.85);
-  g.beginPath(); g.moveTo(-9, 10 + bob); g.lineTo(-24, 22 + bob); g.strokePath();
-  g.beginPath(); g.moveTo(9, 10 + bob);  g.lineTo(24, 22 + bob);  g.strokePath();
-  g.fillStyle(ac, 1); g.fillCircle(-24, 23 + bob, 3); g.fillCircle(24, 23 + bob, 3);
-  g.fillStyle(c, 1); g.fillEllipse(0, 8 + bob, 28, 36);
-  g.fillStyle(ec, 0.35); g.fillCircle(0, 6 + bob, 8);
-  g.fillStyle(ec, 0.85); g.fillCircle(0, 6 + bob, 4);
-  g.fillStyle(c, 0.9); g.fillEllipse(0, -9 + bob, 15, 12);
-  g.fillStyle(c, 1); g.fillRoundedRect(-15, -31 + bob, 30, 22, 5);
-  g.fillStyle(ec, 1); g.fillCircle(-7, -21 + bob, 5); g.fillCircle(7, -21 + bob, 5);
-  if (state === 'attack' && frame % 3 === 0) {
-    g.lineStyle(2, ec, 0.7);
-    g.strokeCircle(-7, -21 + bob, 8); g.strokeCircle(7, -21 + bob, 8);
+  // ── Palette from the enemy def ───────────────────────────────────────────
+  const BODY  = def.color       || 0x7c3aed;
+  const LIGHT = def.accentColor || _shade(BODY, 0.3);
+  const DARK  = _shade(BODY, -0.5);
+  const EYE   = def.eyeColor    || 0xe879f9;
+  const CORE  = EYE;
+  const CLAW  = _shade(BODY, 0.45);
+
+  // ── Class-driven silhouette ──────────────────────────────────────────────
+  const cls       = def.class || 'basic';
+  const isBrute   = (cls === 'brute' || cls === 'armored' || cls === 'elite');
+  const isFast    = (cls === 'fast');
+  const isAerial  = (cls === 'aerial' || cls === 'vehicle');
+  const isRanged  = (cls === 'ranged');
+  const isShield  = (cls === 'shield');
+  const isStealth = (cls === 'stealth' || cls === 'special');
+  const sw        = isBrute ? 1.3 : isFast ? 0.85 : 1;   // width scale
+
+  // ── Per-state parameters ─────────────────────────────────────────────────
+  const f8 = frame % 8;
+  let bob = 0, walkLeg = 0, hurtX = 0, dying = false, lunge = 0, hover = 0, armSwing = 0;
+  switch (state) {
+    case 'idle':
+      bob = Math.sin(frame * 0.5) * 1.5;
+      break;
+    case 'walk':
+      bob = Math.sin(frame * 1.0) * 2;
+      walkLeg = frame;
+      armSwing = Math.sin(frame * 0.9) * 3;
+      break;
+    case 'attack':
+      bob   = Math.sin(frame * 0.5);
+      lunge = f8 < 4 ? -f8 : (f8 - 4) * 3;
+      break;
+    case 'hurt':
+      hurtX = (frame % 4 < 2) ? -5 : 0;
+      bob = 2;
+      break;
+    case 'die':
+      dying = true;
+      break;
+  }
+  if (isAerial) hover = Math.sin(frame * 0.6) * 4 - 12;  // float above ground
+
+  const bx = hurtX + (isFast ? 2 : 0);
+  const by = bob + hover;
+
+  // ── Prone / death ────────────────────────────────────────────────────────
+  if (dying && frame >= 4) {
+    g.fillStyle(0x000000, 0.25);
+    g.fillEllipse(0, 20, 50 * sw, 10);
+    g.fillStyle(BODY, 0.78);
+    g.fillEllipse(-2, 12, 44 * sw, 16);
+    g.fillRoundedRect(-18, 2, 26 * sw, 16, 5);
+    g.fillStyle(EYE, 0.25);
+    g.fillCircle(-10, 9, 4); g.fillCircle(-4, 9, 3);
+    return;
+  }
+
+  // ── Ground shadow ────────────────────────────────────────────────────────
+  g.fillStyle(0x000000, isAerial ? 0.12 : 0.2);
+  g.fillEllipse(0, isAerial ? 36 : 32, 46 * sw, 10);
+
+  // ── Legs (digitigrade) or thrusters ──────────────────────────────────────
+  if (isAerial) {
+    const t = 0.5 + Math.sin(frame * 1.2) * 0.3;
+    g.fillStyle(EYE, t * 0.45);
+    g.fillEllipse(-8, 22 + by, 10, 16); g.fillEllipse(8, 22 + by, 10, 16);
+    g.fillStyle(0xffffff, t * 0.4);
+    g.fillEllipse(-8, 20 + by, 4, 8);   g.fillEllipse(8, 20 + by, 4, 8);
+  } else {
+    const lThighX = walkLeg ? Math.sin(frame * 0.9) * 3 : 0;
+    const rThighX = walkLeg ? Math.sin(frame * 0.9 + Math.PI) * 3 : 0;
+    g.fillStyle(BODY, 1);
+    g.fillRect(-12 * sw + bx + lThighX, 10 + by, 8 * sw, 14);
+    g.fillRect(  4 * sw + bx + rThighX, 10 + by, 8 * sw, 14);
+    g.fillStyle(LIGHT, 0.85);
+    g.fillRect(-14 * sw + bx + lThighX, 22 + by, 6 * sw, 10);
+    g.fillRect(  8 * sw + bx + rThighX, 22 + by, 6 * sw, 10);
+    g.fillStyle(CLAW, 1);
+    g.fillTriangle(-16 * sw + bx + lThighX, 32 + by, -18 * sw + bx + lThighX, 37 + by, -13 * sw + bx + lThighX, 37 + by);
+    g.fillTriangle( 12 * sw + bx + rThighX, 32 + by,  10 * sw + bx + rThighX, 37 + by,  15 * sw + bx + rThighX, 37 + by);
+  }
+
+  // ── Body (torso) ─────────────────────────────────────────────────────────
+  g.fillStyle(BODY, isStealth ? 0.72 : 1);
+  g.fillEllipse(0 + bx, 0 + by, 32 * sw, 26);
+  g.fillStyle(LIGHT, 0.25);
+  g.fillEllipse(2 + bx, 2 + by, 18 * sw, 14);
+  if (isBrute) {   // armour plating
+    g.fillStyle(DARK, 0.7);
+    g.fillRoundedRect(-14 * sw + bx, -8 + by, 28 * sw, 8, 3);
+    g.fillStyle(LIGHT, 0.4);
+    g.fillRect(-10 * sw + bx, -6 + by, 20 * sw, 2);
+  }
+
+  // ── Chest energy core ────────────────────────────────────────────────────
+  const corePulse = 0.5 + Math.sin(frame * 0.6) * 0.25;
+  g.fillStyle(CORE, 0.3);        g.fillCircle(0 + bx, 0 + by, 9);
+  g.fillStyle(CORE, corePulse);  g.fillCircle(0 + bx, 0 + by, 4.5);
+  g.fillStyle(0xffffff, corePulse * 0.5); g.fillCircle(0 + bx, 0 + by, 2);
+
+  // ── Arms ─────────────────────────────────────────────────────────────────
+  const armY = -1 + by;
+  g.lineStyle(5, BODY, 1);
+  g.beginPath(); g.moveTo(-10 * sw + bx, armY); g.lineTo(-22 * sw + bx, 5 + by + armSwing); g.strokePath();
+  g.fillStyle(CLAW, 1); g.fillCircle(-22 * sw + bx, 5 + by + armSwing, 4.5);
+
+  const rEndX = 10 * sw + 12 + lunge + bx;
+  g.lineStyle(5, BODY, 1);
+  g.beginPath(); g.moveTo(10 * sw + bx, armY); g.lineTo(rEndX, 5 + by - armSwing); g.strokePath();
+  if (isRanged) {
+    g.fillStyle(DARK, 1); g.fillRect(rEndX - 2, 1 + by - armSwing, 12, 6);
+    if (state === 'attack' && f8 >= 4) {
+      g.fillStyle(EYE, 0.9);       g.fillCircle(rEndX + 12, 4 + by - armSwing, 4);
+      g.fillStyle(0xffffff, 0.6);  g.fillCircle(rEndX + 12, 4 + by - armSwing, 2);
+    }
+  } else {
+    g.fillStyle(CLAW, 1); g.fillCircle(rEndX, 5 + by - armSwing, 4.5);
+  }
+
+  // ── Neck + domed cranium ─────────────────────────────────────────────────
+  g.fillStyle(BODY, isStealth ? 0.75 : 1);
+  g.fillEllipse(0 + bx, -11 + by, 18 * sw, 12);
+  g.fillRoundedRect(-17 * sw + bx, -32 + by, 34 * sw, 22, 7);
+  g.fillStyle(LIGHT, 0.2);
+  g.fillRoundedRect(-15 * sw + bx, -32 + by, 30 * sw, 10, 5);
+
+  // ── Cranial ridges ───────────────────────────────────────────────────────
+  g.fillStyle(LIGHT, 0.85);
+  [-10, -3, 4, 10].forEach(rx => {
+    g.fillTriangle(rx * sw + bx, -32 + by, (rx - 3) * sw + bx, -40 + by, (rx + 3) * sw + bx, -40 + by);
+  });
+
+  // ── Eyes (glowing orbs) ──────────────────────────────────────────────────
+  const eyeGlow = (state === 'attack') ? 0.7 : 0.3 + Math.sin(frame * 0.5) * 0.15;
+  g.fillStyle(DARK, 1);
+  g.fillCircle(-8 * sw + bx, -21 + by, 5.5); g.fillCircle(8 * sw + bx, -21 + by, 5.5);
+  g.fillStyle(EYE, 1);
+  g.fillCircle(-8 * sw + bx, -21 + by, 4.5); g.fillCircle(8 * sw + bx, -21 + by, 4.5);
+  g.fillStyle(0xfde047, 0.55);
+  g.fillCircle(-8 * sw + bx, -21 + by, 2.2); g.fillCircle(8 * sw + bx, -21 + by, 2.2);
+  g.lineStyle(1.5, EYE, eyeGlow);
+  g.strokeCircle(-8 * sw + bx, -21 + by, 7); g.strokeCircle(8 * sw + bx, -21 + by, 7);
+
+  // ── Mouth slit ───────────────────────────────────────────────────────────
+  g.fillStyle(0x0a0015, 0.9);
+  g.fillRoundedRect(-8 * sw + bx, -12 + by, 16 * sw, 4, 2);
+
+  // ── Shield bubble ────────────────────────────────────────────────────────
+  if (isShield) {
+    const sp = 0.25 + Math.sin(frame * 0.7) * 0.12;
+    g.lineStyle(2, EYE, sp + 0.3);
+    g.strokeEllipse(0 + bx, -4 + by, 56 * sw, 72);
+    g.fillStyle(EYE, sp * 0.25);
+    g.fillEllipse(0 + bx, -4 + by, 56 * sw, 72);
+  }
+
+  // ── Damage flash ─────────────────────────────────────────────────────────
+  if (state === 'hurt' && frame % 2 === 0) {
+    g.fillStyle(0xffffff, 0.26);
+    g.fillRoundedRect(-18 * sw + bx, -42 + by, 36 * sw, 78, 6);
   }
 });

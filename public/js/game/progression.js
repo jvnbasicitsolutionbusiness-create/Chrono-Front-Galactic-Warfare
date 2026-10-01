@@ -15,7 +15,12 @@
 GW.ProgressionManager = class ProgressionManager {
   constructor() {
     this._key  = 'gwr_progression_v2';
-    this.state = this._load();
+    this.isGuest = this._isGuestMode();
+    this.state = this.isGuest ? this._defaultState() : this._load();
+  }
+
+  _isGuestMode() {
+    try { return sessionStorage.getItem('gw_mode') === 'guest'; } catch (_) { return false; }
   }
 
   // ── Load / Save ───────────────────────────────────────────
@@ -24,7 +29,15 @@ GW.ProgressionManager = class ProgressionManager {
       const raw = localStorage.getItem(this._key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        return Object.assign({}, this._defaultState(), parsed);
+        const state = Object.assign({}, this._defaultState(), parsed);
+        state.settings = Object.assign({}, this._defaultState().settings, parsed.settings || {});
+        // Merge any schema-default starters the save predates (e.g. saves written
+        // while the Fire-Lancer card id was stale), so both starter slots always exist.
+        const defaults = (GW.PROGRESSION_SCHEMA && GW.PROGRESSION_SCHEMA.claimedCards) || [];
+        defaults.forEach(id => {
+          if (!state.claimedCards.includes(id)) state.claimedCards.push(id);
+        });
+        return state;
       }
     } catch (e) {
       console.warn('[Progression] Load failed, using defaults.', e);
@@ -40,7 +53,7 @@ GW.ProgressionManager = class ProgressionManager {
       isNewPlayer:      schema.isNewPlayer !== false,
       currentLevel:     schema.currentLevel || 1,
       completedLevels:  [],
-      claimedCards:     ['plasma_energy_generator', 'fire_lance_gunner'],
+      claimedCards:     (schema.claimedCards || ['plasma_energy_generator', 'fire_lancer']).slice(),
       discoveredEnemies:['vex_drone'],
       unlockedModes:    ['adventure', 'settings', 'credits'],
       unlockedEnvs:     ['daytime'],
@@ -49,18 +62,24 @@ GW.ProgressionManager = class ProgressionManager {
       bestEndlessWave:  0,
       bestEndlessScore: 0,
       galacticCoins:    0,   // persistent wallet — never resets between levels or modes
-      settings: { sfxVolume: 0.8, musicVolume: 0.6, showTips: true, pixelArt: true },
+      settings: {
+        sfxVolume: 0.8, musicVolume: 0.6, showTips: true, pixelArt: true,
+        resolution: 'standard', graphicsQuality: 'balanced', textureQuality: 'crisp', modelQuality: 'high',
+      },
     };
   }
 
   save() {
+    if (this.isGuest || this._isGuestMode()) return;
     try { localStorage.setItem(this._key, JSON.stringify(this.state)); } catch (e) {
       console.warn('[Progression] Save failed.', e);
     }
     // Async Sheets sync (fire-and-forget) — uses sheetsClient which also aliases firebaseClient
     const client = (window.GW && window.GW.sheetsClient) || (window.GW && window.GW.firebaseClient);
     if (client && client.ready) {
-      const uid = this.state.playerName || 'anonymous';
+      let user = {};
+      try { user = JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) {}
+      const uid = user.email || this.state.playerName || 'anonymous';
       client.saveProgression(uid, this.state).catch(() => {});
     }
   }
@@ -82,6 +101,7 @@ GW.ProgressionManager = class ProgressionManager {
 
   // ── Level Progress ────────────────────────────────────────
   isLevelUnlocked(levelId) {
+    if ((this.isGuest || this._isGuestMode()) && levelId > 10) return false;
     if (levelId === 1) return true;
     const levelDef = GW.LEVELS[levelId];
     if (!levelDef) return false;
@@ -148,6 +168,7 @@ GW.ProgressionManager = class ProgressionManager {
 
   // ── Modes ─────────────────────────────────────────────────
   isModeUnlocked(modeId) {
+    if (this.isGuest || this._isGuestMode()) return ['adventure', 'settings', 'credits'].includes(modeId);
     return this.state.unlockedModes.includes(modeId);
   }
 

@@ -129,12 +129,12 @@
     g('btnMiniGames').addEventListener('click', () => _tryOpen('minigames',          'miniGamesOverlay'));
     g('btnPuzzle').addEventListener('click',    () => _tryOpen('puzzle',             'puzzleOverlay'));
     g('btnProfiles').addEventListener('click',  () => _tryOpen('characters_profile', 'profilesOverlay'));
-    g('btnExtras').addEventListener('click',    () => _tryOpen('extras',             'extrasOverlay'));
+    g('btnExtras').addEventListener('click',    () => show('extrasOverlay'));
 
     // Always unlocked
     g('btnSettings').addEventListener('click', () => show('settingsOverlay'));
     g('btnCredits').addEventListener('click',  () => show('creditsOverlay'));
-    g('btnQuit').addEventListener('click',     () => show('quitOverlay'));
+    g('btnQuit').addEventListener('click',     () => window.gwLogout && window.gwLogout());
     g('btnNotify').addEventListener('click',   () => show('notifyOverlay'));
 
     // Quit confirm
@@ -222,7 +222,9 @@
     const el   = g('playerGreeting');
     const prog = window.GW && window.GW.progression;
     if (!el || !prog) return;
-    if (!prog.isNewPlayer()) {
+    if (prog.isGuest || sessionStorage.getItem('gw_mode') === 'guest') {
+      el.textContent = 'GUEST DEMO  ·  PROGRESS NOT SAVED';
+    } else if (!prog.isNewPlayer()) {
       const stats = prog.getStats();
       el.textContent = `Commander: ${stats.playerName}  ·  Level ${stats.currentLevel}  ·  ${stats.cardsCollected}/52 Cards`;
     }
@@ -259,6 +261,7 @@
         id === 1  ? 'level-card--current'  : '',
         completed ? 'level-card--completed': '',
       ].filter(Boolean).join(' ');
+      if (unlocked) card.dataset.audioCue = 'level-' + id;
 
       if (!unlocked) {
         card.innerHTML =
@@ -275,7 +278,10 @@
           (completed ? '<span class="level-complete">✓</span>' : '');
         card.addEventListener('click', () => {
           hide('adventureOverlay');
-          setTimeout(() => { window.location.href = 'game.html?level=' + id; }, 100);
+          setTimeout(() => {
+            sessionStorage.setItem('gw_menu_return', '1');
+            window.location.href = 'game.html?level=' + id;
+          }, 100);
         });
       }
       grid.appendChild(card);
@@ -288,7 +294,7 @@
   // They match the colour palettes from sprites.js / the sprite-sheet references.
   const CHAR_PORTRAITS = {
 
-    fire_lance_gunner: `<svg viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg">
+    fire_lancer: `<svg viewBox="0 0 56 72" xmlns="http://www.w3.org/2000/svg">
       <!-- Shadow --><ellipse cx="28" cy="68" rx="16" ry="4" fill="#000" opacity="0.25"/>
       <!-- Boots --><rect x="18" y="52" width="9" height="7" fill="#1c1008"/><rect x="30" y="52" width="9" height="7" fill="#1c1008"/>
       <!-- Legs --><rect x="19" y="39" width="9" height="14" fill="#6b1a1a"/><rect x="30" y="39" width="9" height="14" fill="#6b1a1a"/>
@@ -474,7 +480,7 @@
         // Pick portrait SVG: known units get detailed art, others get a mini canvas render
         const portraitSvg =
           CHAR_PORTRAITS[card.id] ||
-          (card.id === 'fire_lance_gunner'       ? CHAR_PORTRAITS.fire_lance_gunner       : null) ||
+          (card.id === 'fire_lancer'             ? CHAR_PORTRAITS.fire_lancer             : null) ||
           (card.id === 'plasma_energy_generator' ? CHAR_PORTRAITS.plasma_energy_generator : null) ||
           CHAR_PORTRAITS._default_military;
 
@@ -562,7 +568,10 @@
         el.addEventListener('click', () => {
           if (mg.id === 'free_play') {
             hide('miniGamesOverlay');
-            setTimeout(() => { window.location.href = 'game.html?level=1'; }, 100);
+            setTimeout(() => {
+              sessionStorage.setItem('gw_menu_return', '1');
+              window.location.href = 'game.html?level=1';
+            }, 100);
           } else { show('comingSoonOverlay'); }
         });
       }
@@ -615,18 +624,34 @@
           tips = g('showTips'), px = g('pixelArt');
     if (sfx)   sfx.value    = Math.round(prog.getSetting('sfxVolume')   * 100);
     if (music) music.value  = Math.round(prog.getSetting('musicVolume') * 100);
+    if (window.GWAudio) window.GWAudio.setVolumes(music ? music.value / 100 : undefined, sfx ? sfx.value / 100 : undefined);
     if (tips)  tips.checked = prog.getSetting('showTips');
     if (px)    px.checked   = prog.getSetting('pixelArt') !== false;
+    ['graphicsResolution', 'graphicsQuality', 'textureQuality', 'modelQuality'].forEach(id => {
+      const control = g(id);
+      const key = id === 'graphicsResolution' ? 'resolution' : id;
+      if (control) control.value = prog.getSetting(key) || (window.GWGraphics && window.GWGraphics.defaults[key]);
+    });
+    if (window.GWGraphics) window.GWGraphics.apply();
   }
 
   function _saveSettings() {
     const prog = window.GW && window.GW.progression; if (!prog) return;
+    const settings = prog.state.settings;
     const sfx  = g('sfxVol'), music = g('musicVol'),
           tips = g('showTips'), px = g('pixelArt');
-    if (sfx)   prog.setSetting('sfxVolume',   parseInt(sfx.value, 10)   / 100);
-    if (music) prog.setSetting('musicVolume', parseInt(music.value, 10) / 100);
-    if (tips)  prog.setSetting('showTips', tips.checked);
-    if (px)    prog.setSetting('pixelArt', px.checked);
+    if (sfx)   settings.sfxVolume = parseInt(sfx.value, 10) / 100;
+    if (music) settings.musicVolume = parseInt(music.value, 10) / 100;
+    if (window.GWAudio) window.GWAudio.setVolumes(music ? music.value / 100 : undefined, sfx ? sfx.value / 100 : undefined);
+    if (tips)  settings.showTips = tips.checked;
+    if (px)    settings.pixelArt = px.checked;
+    ['graphicsResolution', 'graphicsQuality', 'textureQuality', 'modelQuality'].forEach(id => {
+      const control = g(id);
+      const key = id === 'graphicsResolution' ? 'resolution' : id;
+      if (control) settings[key] = control.value;
+    });
+    prog.save();
+    if (window.GWGraphics) window.GWGraphics.apply();
   }
 
   // ── Particles ─────────────────────────────────────────────

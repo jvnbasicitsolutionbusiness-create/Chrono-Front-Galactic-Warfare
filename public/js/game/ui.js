@@ -349,8 +349,8 @@ GW.UIManager = class UIManager {
       g.lineStyle(1, 0x78350f, 1);
       g.beginPath(); g.moveTo(9, -12); g.lineTo(11, -16); g.strokePath();
       g.fillStyle(0xfbbf24, 1); g.fillCircle(11, -17, 1.5);
-    } else if (def.id === 'fire_lance_gunner') {
-      // ── Fire-Lance Gunner card icon ──────────────────────────────────────
+    } else if (def.id === 'fire_lancer') {
+      // ── Fire-Lancer card icon ──────────────────────────────────────
       // Miniature version of the sprite: dark maroon uniform, red plume helmet,
       // orange fire-lance pole extending right with a small flame at the tip.
 
@@ -413,11 +413,13 @@ GW.UIManager = class UIManager {
 
     if (this.selectedCardId === id) {
       this.selectedCardId = null;
+      if (window.GWAudio) window.GWAudio.play('card-deselect');
       if (this.onCharacterSelected) this.onCharacterSelected(null);
       return;
     }
 
     this.selectedCardId = id;
+    if (window.GWAudio) window.GWAudio.play('card-select');
     const found = this.trayCards.find(c => c.id === id);
     if (found && found.card) {
       const { bg, w, h } = found.card;
@@ -480,6 +482,7 @@ GW.UIManager = class UIManager {
     zone.on('pointerover',  () => draw(true));
     zone.on('pointerout',   () => draw(false));
     zone.on('pointerdown',  () => {
+      if (window.GWAudio) window.GWAudio.play('battle-menu');
       draw(false);
       this._openPauseMenu();
     });
@@ -489,14 +492,15 @@ GW.UIManager = class UIManager {
   }
 
   // ══════════════════════════════════════════════════════════
-  //  TACTICAL INVASION TIMELINE (BOTTOM)
-  //  Replaces old WAVE X/Y display entirely.
+  //  INVASION PROGRESS BAR (BOTTOM)
+  //  v1.0.1: renamed from "INVASION TIMELINE", bar shortened
+  //  to 400 px and centred, progress smoothly reaches 1.0.
   // ══════════════════════════════════════════════════════════
   _buildTimeline() {
     const s   = this.scene;
-    const TLY = GW.BOARD.TIMELINE_Y;     // 522
+    const TLY = GW.BOARD.TIMELINE_Y;      // 522
     const TLH = GW.BOARD.TIMELINE_HEIGHT; // 55
-    const W   = this.W;
+    const W   = this.W;                   // 960
 
     // Background strip
     const bg = s.add.graphics().setDepth(28);
@@ -505,31 +509,25 @@ GW.UIManager = class UIManager {
     bg.lineStyle(1, 0x2d3a2d, 0.6);
     bg.lineBetween(0, TLY, W, TLY);
 
-    // "INVASION TIMELINE" label — compact, top-left of strip
-    s.add.text(6, TLY + 3, 'INVASION TIMELINE', {
+    // Label — updated name
+    s.add.text(6, TLY + 3, 'INVASION PROGRESS', {
       fontFamily: '"Exo 2", monospace',
       fontSize:   '6px',
       color:      '#4a5a3a',
       letterSpacing: 1,
     }).setDepth(29);
 
-    // ── Progress bar ──────────────────────────────────────────
-    // Left margin = 100: leaves room for the 'INVASION TIMELINE' label (x=6).
-    // Right margin = 8: tight against the right edge.
-    // Bar = 960 - 100 - 8 = 852px — alien head now travels the full bar
-    // without overlapping the label at progress=0.
-    const BAR_MARGIN_L = 100;  // left margin — clears the label
-    const BAR_MARGIN_R = 8;    // right margin
-    const BAR_MARGIN   = BAR_MARGIN_L;   // alias used by helpers
-    const BAR_Y = TLY + 20;
-    const BAR_W = W - BAR_MARGIN_L - BAR_MARGIN_R;  // 852px
-    const BAR_H = 6;
+    // ── Progress bar — 400 px wide, centred on screen ─────────────────────
+    const BAR_W = 400;
+    const BAR_H = 8;
+    const BAR_MARGIN = Math.floor((W - BAR_W) / 2); // = 280
+    const BAR_Y = TLY + 18;
 
     const barBg = s.add.graphics().setDepth(29);
     barBg.fillStyle(0x0d1a0d, 1);
-    barBg.fillRoundedRect(BAR_MARGIN, BAR_Y, BAR_W, BAR_H, 3);
+    barBg.fillRoundedRect(BAR_MARGIN, BAR_Y, BAR_W, BAR_H, 4);
     barBg.lineStyle(1, 0x2d3a2d, 0.5);
-    barBg.strokeRoundedRect(BAR_MARGIN, BAR_Y, BAR_W, BAR_H, 3);
+    barBg.strokeRoundedRect(BAR_MARGIN, BAR_Y, BAR_W, BAR_H, 4);
 
     this.timelineBar = s.add.graphics().setDepth(30);
     this._drawTimelineProgress(0);
@@ -538,7 +536,9 @@ GW.UIManager = class UIManager {
     this._waveMarkers = [];
     const waveCount = this._totalWaves;
     for (let i = 0; i < waveCount; i++) {
-      const pct    = (i + 1) / waveCount;
+      // v1.0.1 fix: for a single-wave level pct = 1.0 so the marker sits at
+      // the far-right end of the bar and progress correctly reaches it.
+      const pct    = waveCount === 1 ? 1 : (i + 1) / waveCount;
       const mx     = BAR_MARGIN + BAR_W * pct;
       const isLast = (i === waveCount - 1);
 
@@ -557,7 +557,7 @@ GW.UIManager = class UIManager {
       this._waveMarkers.push({ marker, pct, x: mx, y: BAR_Y + BAR_H / 2 });
     }
 
-    // Store bar geometry so draw helpers can reference it
+    // Store bar geometry for draw helpers
     this._BAR_MARGIN = BAR_MARGIN;
     this._BAR_W      = BAR_W;
     this._BAR_Y      = BAR_Y;
@@ -618,7 +618,9 @@ GW.UIManager = class UIManager {
     }
   }
 
-  /** Update timeline progress. Call when wave advances. */
+  /** Update invasion progress. Call when a wave starts or clears.
+   *  v1.0.1: for a 1-wave level totalWaves===1, so we pass progress directly
+   *  (0 at start, 1.0 when the wave clears) rather than dividing by zero. */
   updateTimeline(progress) {
     this._currentProgress = Math.max(0, Math.min(1, progress));
     this._drawTimelineProgress(this._currentProgress);
@@ -669,13 +671,22 @@ GW.UIManager = class UIManager {
   showBanner(text, color, duration) {
     color    = color    || GW.UI_COLORS.GREEN_BRIGHT;
     duration = duration || 1800;
-    this.bannerText.setText(text).setColor(color).setAlpha(1);
+    this.scene.tweens.killTweensOf(this.bannerText);
+    this.bannerText.setText(text).setColor(color).setAlpha(0);
     this.scene.tweens.add({
       targets:  this.bannerText,
-      alpha:    0,
-      delay:    duration - 350,
-      duration: 350,
-      ease:     'Power1',
+      alpha:    1,
+      duration: 50,
+      ease:     'Linear',
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets:  this.bannerText,
+          alpha:    0,
+          delay:    Math.max(0, duration - 400),
+          duration: 350,
+          ease:     'Power1',
+        });
+      },
     });
   }
 
@@ -749,6 +760,9 @@ GW.UIManager = class UIManager {
     }
     this.isPaused = true;
     if (this.scene._paused !== undefined) this.scene._paused = true;
+    if (this.scene.time) this.scene.time.paused = true;
+    if (this.scene.tweens && this.scene.tweens.pauseAll) this.scene.tweens.pauseAll();
+    if (this.scene._saveBattleSnapshot) this.scene._saveBattleSnapshot();
     this._buildPauseOverlay();
     if (this.onMenuPressed) this.onMenuPressed();
   }
@@ -756,11 +770,25 @@ GW.UIManager = class UIManager {
   _closePauseMenu() {
     this.isPaused = false;
     if (this.scene._paused !== undefined) this.scene._paused = false;
+    this.scene._battleSnapshotSaved = false;
+    if (this.scene.time) this.scene.time.paused = false;
+    if (this.scene.tweens && this.scene.tweens.resumeAll) this.scene.tweens.resumeAll();
     if (this._pauseOverlay) {
       this._pauseOverlay.destroy(true);
       this._pauseOverlay = null;
     }
     if (this.onPauseResume) this.onPauseResume();
+  }
+
+  async _saveAndQuit() {
+    if (this._saveQuitPending) return;
+    this._saveQuitPending = true;
+    try {
+      if (this.scene._saveBattleSnapshot) await this.scene._saveBattleSnapshot(true);
+    } catch (error) {
+      console.warn('[Game] Cloud checkpoint failed; local checkpoint remains available.', error);
+    }
+    if (this.onPauseQuit) this.onPauseQuit();
   }
 
   _buildPauseOverlay() {
@@ -777,7 +805,7 @@ GW.UIManager = class UIManager {
     container.add(dim);
 
     // Panel
-    const PW = 300, PH = 430;
+    const PW = 300, PH = 560;
     const PX = W / 2 - PW / 2;
     const PY = H / 2 - PH / 2;
 
@@ -799,9 +827,9 @@ GW.UIManager = class UIManager {
 
     // Buttons
     const options = [
-      { label: 'RESUME',        color: 0x15803d, cb: () => this._closePauseMenu() },
-      { label: 'RESTART LEVEL', color: 0x374151, cb: () => { this._closePauseMenu(); if (this.onPauseRestart) this.onPauseRestart(); }},
-      { label: 'SAVE & QUIT',   color: 0x7f1d1d, cb: () => { this._closePauseMenu(); if (this.onPauseQuit) this.onPauseQuit(); }},
+      { label: 'RESUME',        color: 0x15803d, cue: 'battle-menu', cb: () => this._closePauseMenu() },
+      { label: 'RESTART LEVEL', color: 0x374151, cue: 'battle-menu', cb: () => { this._closePauseMenu(); if (this.onPauseRestart) this.onPauseRestart(); }},
+      { label: 'SAVE & QUIT',   color: 0x7f1d1d, cue: 'battle-menu', cb: () => this._saveAndQuit() },
     ];
 
     options.forEach((opt, i) => {
@@ -835,14 +863,18 @@ GW.UIManager = class UIManager {
 
       zone.on('pointerover',  () => drawBtn(true));
       zone.on('pointerout',   () => drawBtn(false));
-      zone.on('pointerdown', () => { zone.removeAllListeners(); opt.cb(); });
+      zone.on('pointerdown', () => {
+        if (window.GWAudio) window.GWAudio.play(opt.cue);
+        zone.removeAllListeners(); opt.cb();
+        if (opt.label === 'SAVE & QUIT') btnTxt.setText('SAVING...');
+      });
     });
 
     // ── Volume Sliders ──────────────────────────────────────
     const slBase = PY + 68 + options.length * 52 + 10;
     [
       { label: 'MUSIC', key: 'musicVolume', def: 0.6 },
-      { label: 'SFX',   key: 'sfxVolume',   def: 0.8 },
+      { label: 'SOUND EFFECTS', key: 'sfxVolume', def: 0.8 },
     ].forEach(function(sl, si) {
       const SY = slBase + si * 50, SX = PX + 20, SW = PW - 40;
       const lbl = s.add.text(SX, SY, sl.label, {
@@ -879,10 +911,48 @@ GW.UIManager = class UIManager {
         if (prog && prog.state && prog.state.settings) {
           prog.state.settings[sl.key] = v;
           if (prog.save) prog.save();
+          if (window.GWAudio) {
+            window.GWAudio.setVolumes(prog.state.settings.musicVolume, prog.state.settings.sfxVolume);
+          }
         }
       };
       slZone.on('pointerdown', function(ptr) { upd(ptr.x); });
       slZone.on('pointermove', function(ptr) { if (ptr.isDown) upd(ptr.x); });
+    });
+
+    const graphicsOptions = [
+      { label: 'RESOLUTION', key: 'resolution', values: ['low', 'standard', 'high'] },
+      { label: 'GRAPHICS QUALITY', key: 'graphicsQuality', values: ['performance', 'balanced', 'high'] },
+      { label: 'TEXTURES', key: 'textureQuality', values: ['crisp', 'smooth'] },
+      { label: 'MODEL / ANIMATION', key: 'modelQuality', values: ['low', 'balanced', 'high'] },
+    ];
+    const graphicsTop = slBase + 2 * 50 + 4;
+    graphicsOptions.forEach((option, index) => {
+      const rowY = graphicsTop + index * 38;
+      const prog = window.GW && window.GW.progression;
+      const defaultValue = option.values[Math.floor(option.values.length / 2)];
+      let selected = option.values.indexOf(prog && prog.getSetting(option.key));
+      if (selected < 0) selected = option.values.indexOf(defaultValue);
+
+      const label = s.add.text(PX + 20, rowY + 12, option.label, {
+        fontFamily: '"Exo 2", monospace', fontSize: '8px', fontStyle: 'bold', color: '#86efac',
+      }).setOrigin(0, 0.5).setDepth(92);
+      const value = s.add.text(PX + PW - 20, rowY + 12, option.values[selected].toUpperCase(), {
+        fontFamily: '"Exo 2", monospace', fontSize: '9px', fontStyle: 'bold', color: '#e8f0ff',
+      }).setOrigin(1, 0.5).setDepth(93);
+      const zone = s.add.rectangle(W / 2, rowY + 12, PW - 36, 28, 0x0b1e14, 0.65)
+        .setDepth(91).setInteractive({ useHandCursor: true });
+
+      container.add([zone, label, value]);
+      zone.on('pointerdown', () => {
+        selected = (selected + 1) % option.values.length;
+        const next = option.values[selected];
+        value.setText(next.toUpperCase());
+        if (window.GWGraphics) window.GWGraphics.saveSetting(option.key, next);
+        else if (prog) {
+          prog.setSetting(option.key, next);
+        }
+      });
     });
   }
 
@@ -910,8 +980,6 @@ GW.UIManager = class UIManager {
       if (d < bestDist) { bestDist = d; best = m; }
     });
     if (!best) return;
-    // Advance head to at least this marker
-    if ((this._currentProgress || 0) < best.pct) this.updateTimelineHead(best.pct);
     // Glow the marker
     const isLast = Math.abs(best.pct - 1.0) < 0.02;
     best.marker.clear();
@@ -1067,6 +1135,7 @@ GW.UIManager = class UIManager {
       callbacks.push({
         label: claimLabel,
         color: 0xd97706,
+        cue: 'victory-claim',
         cb: () => {
           if (cm) cm.claimPendingCard();
           // After claiming, go to next level if available, otherwise replay
@@ -1079,12 +1148,13 @@ GW.UIManager = class UIManager {
       callbacks.push({
         label: 'NEXT LEVEL \u2192 ' + nextName,
         color: 0x166534,
+        cue: 'victory-next',
         cb: onNextLevel,
       });
     }
 
-    callbacks.push({ label: 'PLAY AGAIN',   color: 0x374151, cb: onPlayAgain });
-    callbacks.push({ label: 'SAVE & QUIT',  color: 0x1e3a5f, cb: onMainMenu  });
+    callbacks.push({ label: 'PLAY AGAIN',   color: 0x374151, cue: 'victory-replay', cb: onPlayAgain });
+    callbacks.push({ label: 'SAVE & QUIT',  color: 0x1e3a5f, cue: 'victory-menu', cb: onMainMenu  });
 
     this._showEndScreen({
       title:      'SECTOR SECURED!',
@@ -1149,8 +1219,8 @@ GW.UIManager = class UIManager {
     const bStartX = W / 2 - totalBW / 2;
     const bY      = PY + PH - BTN_H - 18;
 
-    this._makeEndBtn(bStartX,            bY, BTN_W, BTN_H, 'TRY AGAIN',  0x15803d, onRetry);
-    this._makeEndBtn(bStartX + BTN_W + gap, bY, BTN_W, BTN_H, 'MAIN MENU', 0x1e3a5f, onMainMenu);
+    this._makeEndBtn(bStartX, bY, BTN_W, BTN_H, 'TRY AGAIN', 0x15803d, onRetry, 'defeat-retry');
+    this._makeEndBtn(bStartX + BTN_W + gap, bY, BTN_W, BTN_H, 'MAIN MENU', 0x1e3a5f, onMainMenu, 'defeat-menu');
   }
 
   _showEndScreen({ title, titleColor, lines, buttons }) {
@@ -1193,11 +1263,11 @@ GW.UIManager = class UIManager {
     buttons.forEach((btn, i) => {
       const bx = W/2 - BTN_W/2;
       const by = btnsTop + i * 52;
-      this._makeEndBtn(bx, by, BTN_W, BTN_H, btn.label, btn.color, btn.cb);
+      this._makeEndBtn(bx, by, BTN_W, BTN_H, btn.label, btn.color, btn.cb, btn.cue);
     });
   }
 
-  _makeEndBtn(x, y, w, h, label, color, callback) {
+  _makeEndBtn(x, y, w, h, label, color, callback, cue) {
     const s = this.scene;
     const D = 53;
     const bg = s.add.graphics().setDepth(D);
@@ -1221,7 +1291,10 @@ GW.UIManager = class UIManager {
 
     zone.on('pointerover',  () => draw(true));
     zone.on('pointerout',   () => draw(false));
-    zone.on('pointerdown',  () => { zone.removeAllListeners(); callback(); });
+    zone.on('pointerdown',  () => {
+      if (window.GWAudio && cue) window.GWAudio.play(cue);
+      zone.removeAllListeners(); callback();
+    });
 
     return { bg, txt, zone };
   }

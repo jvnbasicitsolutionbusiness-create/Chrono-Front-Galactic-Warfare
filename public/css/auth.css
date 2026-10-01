@@ -53,6 +53,36 @@ body {
   outline-offset: 3px;
 }
 
+.auth-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  background: #04060f;
+  color: var(--clr-primary);
+  transition: opacity 0.5s ease, visibility 0.5s ease;
+}
+.auth-loader--done { opacity: 0; visibility: hidden; pointer-events: none; }
+.auth-loader-mark { font-size: 44px; text-shadow: 0 0 24px var(--clr-primary); }
+.auth-loader-title { font: 900 18px var(--font-title); text-align: center; }
+.auth-loader-status { color: var(--clr-text-dim); font-size: 12px; }
+.auth-loader-track { width: min(340px, 80vw); height: 4px; background: #12212b; }
+.auth-loader-track span { display: block; width: 0; height: 100%; background: var(--clr-primary); box-shadow: 0 0 12px var(--clr-primary); transition: width 0.2s ease; }
+.loading-audio-toggle {
+  margin-top: 12px;
+  padding: 9px 14px;
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  border-radius: 4px;
+  background: rgba(8, 145, 178, 0.12);
+  color: var(--clr-text);
+  font: 700 11px var(--font-ui);
+  cursor: pointer;
+}
+
 /* ── Animated background ─────────────────────────────────── */
 .auth-bg {
   position: fixed;
@@ -129,12 +159,14 @@ body {
   z-index: 10;
   /* Use min-height so short content still centres, tall content scrolls */
   min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
   /* justify-content: flex-start so overflow scrolls down instead of clipping */
   justify-content: flex-start;
-  padding: 24px 16px 32px;
+  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
 }
 
 /* ── Game title above the panel ─────────────────────────── */
@@ -270,6 +302,27 @@ body {
   outline: none;
   -webkit-appearance: none;
 }
+
+.auth-entry-actions {
+  width: min(100%, 430px);
+  margin: 12px auto 0;
+}
+.auth-entry-note {
+  margin: 7px 4px 10px;
+  color: var(--clr-text-dim);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.auth-entry-note[hidden] { display: none; }
+.auth-guest {
+  background: rgba(18, 34, 45, 0.82);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--clr-text);
+}
+.auth-guest:hover,
+.auth-continue:hover { filter: brightness(1.15); }
+.auth-continue[hidden] { display: none; }
 .auth-input:focus {
   border-color: var(--clr-primary);
   box-shadow: 0 0 0 3px rgba(34,211,238,0.12);
@@ -464,5 +517,14 @@ body {
 @media (max-width: 440px) {
   .auth-panel        { padding: 18px 16px 16px; }
   .auth-game-title .title-top { font-size: 1.1rem; }
-  .auth-tab          { font-size: 0.68rem; padding: 6px 0; }
+  .auth-tab          { font-size: 0.68rem; padding: 10px 4px; min-height: 44px; }
+  .auth-page         { padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+  .auth-input        { font-size: 16px; }
+  .auth-submit       { min-height: 48px; }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .auth-page { align-items: stretch; padding-top: max(8px, env(safe-area-inset-top)); }
+  .auth-game-title { margin-top: 0; }
+  .auth-entry-actions { margin-top: 8px; }
 }

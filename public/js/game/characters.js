@@ -52,13 +52,15 @@ GW.Character = class Character {
       this.isSupport   = false;
     }
 
-    this.attackTimer = 0;
+    this._prefireCuePlayed = false;
+    this.attackTimer = def.weapon === 'fire_lance' ? 500 : 0;
     this.container   = null;
     this.graphics    = null;
     this.animator    = null;
     this.onGenerateEnergy = null;
 
     this._build();
+    if (this.container) this.container.setScale(this.isSupport ? 0.7 : 0.76);
   }
 
   _build() {
@@ -150,23 +152,41 @@ GW.Character = class Character {
     if (!this.alive) return null;
 
     if (this.isSupport) {
-      // Randomize genTimer on each tick: 8–10s (using config min/max if available)
-      const genMin = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 8000;
-      const genMax = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 10000;
-      this.genTimer -= delta;
-      if (this.genTimer <= 0) {
-        // Next tick is randomized within 8–10s
-        this.genTimer = genMin + Math.floor(Math.random() * (genMax - genMin + 1));
-        if (this.onGenerateEnergy) this.onGenerateEnergy(this.genAmount, this.x, this.y);
-        if (this.animator) {
-          this.animator.play('attack', 8);
-          this.scene.time.delayedCall(400, () => {
-            if (this.animator && this.alive) this.animator.play('idle');
-          });
-        }
+      // v1.0.1: 15–20 s interval from config (was 10–12 s).
+      // The timer counts DOWN; when it hits zero we begin the charge phase.
+      const genMin = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 15000;
+      const genMax = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 20000;
 
-        // ── Generation pulse animation ──────────────────────────────────
-        // Inner golden flash — bright core burst centred on the crystal
+      this.genTimer -= delta;
+
+      // ── Charge-phase visual (last 1 500 ms before production) ──────────────
+      // A brightening orbital ring pulses as the generator "charges up".
+      // We only start this once per cycle, keyed by _chargeStarted flag.
+      if (this.genTimer <= 1500 && !this._chargeStarted) {
+        this._chargeStarted = true;
+        const charge = this.scene.add.graphics().setDepth(13);
+        charge.lineStyle(2, 0x22d3ee, 0.6);
+        charge.strokeCircle(this.x, this.y - 18, 12);
+        charge.x = 0; charge.y = 0;
+        // Spiral inward — shrinks from 1.4× to 1× then fades
+        this.scene.tweens.add({
+          targets: charge, scaleX: 0.6, scaleY: 0.6,
+          duration: 1400, ease: 'Sine.easeIn',
+        });
+        this.scene.tweens.add({
+          targets: charge, alpha: 0,
+          delay: 1000, duration: 500, ease: 'Power1',
+          onComplete: () => charge.destroy(),
+        });
+      }
+
+      if (this.genTimer <= 0) {
+        // Reset timer with fresh randomised interval BEFORE spawning the orb
+        this.genTimer = genMin + Math.floor(Math.random() * (genMax - genMin + 1));
+        this._chargeStarted = false;   // allow charge ring next cycle
+
+        // ── Production animation ────────────────────────────────────────
+        // Bright white flash at the orb housing
         const flash = this.scene.add.graphics().setDepth(14);
         flash.fillStyle(0xfef3c7, 0.95);
         flash.fillCircle(this.x, this.y - 18, 10);
@@ -176,7 +196,7 @@ GW.Character = class Character {
           onComplete: () => flash.destroy(),
         });
 
-        // First ring — gold, expands fast
+        // Outward rings — gold then amber
         const ring1 = this.scene.add.graphics().setDepth(13);
         ring1.lineStyle(2.5, 0xfbbf24, 0.9);
         ring1.strokeCircle(this.x, this.y - 18, 8);
@@ -186,7 +206,6 @@ GW.Character = class Character {
           onComplete: () => ring1.destroy(),
         });
 
-        // Second ring — amber, delayed slightly, expands wider
         const ring2 = this.scene.add.graphics().setDepth(13);
         ring2.lineStyle(1.5, 0xf59e0b, 0.6);
         ring2.strokeCircle(this.x, this.y - 18, 8);
@@ -196,11 +215,22 @@ GW.Character = class Character {
           onComplete: () => ring2.destroy(),
         });
 
-        // Container scale-breathe — unit "pulses" outward then snaps back
+        // Container scale-breathe
         if (this.container) {
           this.scene.tweens.add({
             targets: this.container, scaleX: 1.18, scaleY: 1.18,
             duration: 160, ease: 'Power2', yoyo: true,
+          });
+        }
+
+        // Spawn the actual collectible plasma orb (via ResourceManager callback)
+        // NO energy is added automatically — the player must click the orb.
+        if (this.onGenerateEnergy) this.onGenerateEnergy(this.genAmount, this.x, this.y);
+
+        if (this.animator) {
+          this.animator.play('attack', 8);
+          this.scene.time.delayedCall(400, () => {
+            if (this.animator && this.alive) this.animator.play('idle');
           });
         }
       }
@@ -211,6 +241,10 @@ GW.Character = class Character {
     this.target = this._findTarget(enemies);
 
     if (!this.target) {
+      if (this._prefireCuePlayed) {
+        this.attackTimer = Math.max(this.attackTimer, 500);
+        this._prefireCuePlayed = false;
+      }
       if (this.animator && this.animator.state === 'attack') {
         this.animator.play('idle');
       }
@@ -218,8 +252,13 @@ GW.Character = class Character {
     }
 
     this.attackTimer -= delta;
+    if (this.def.weapon === 'fire_lance' && this.attackTimer <= 500 && !this._prefireCuePlayed) {
+      if (window.GWAudio) window.GWAudio.play('fire-lance-windup');
+      this._prefireCuePlayed = true;
+    }
     if (this.attackTimer <= 0) {
       this.attackTimer = this.attackSpeed;
+      this._prefireCuePlayed = false;
       if (this.animator) {
         this.animator.play('attack', 8);
         this.scene.time.delayedCall(this.attackSpeed * 0.55, () => {
@@ -238,7 +277,9 @@ GW.Character = class Character {
       if (!en.alive) continue;
       if (en.lane !== this.lane) continue;
       const dist = en.x - this.x;
-      // Enemy must be to the right (approaching) and within range
+      // v1.0.1: ranged units (range > 0) may target enemies anywhere to the right
+      // within their range — including enemies still inside the alien zone.
+      // The only requirement is dist > 0 (enemy hasn't passed this unit yet).
       if (dist > 0 && dist <= this.range && dist < closestDist) {
         closestDist = dist;
         closest = en;

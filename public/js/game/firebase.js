@@ -20,8 +20,9 @@ GW.FirebaseClient = class FirebaseClient {
   /** Initialize Firebase using config fetched from the server. */
   async init() {
     try {
-      const apiBase = (window.location.port === '3000' || window.location.protocol === 'https:')
-        ? '' : 'http://localhost:3000';
+      // Resolve the API base first so we never probe a hardcoded foreign port.
+      if (window.GWNet && window.GWNet.probeBackend) await window.GWNet.probeBackend();
+      const apiBase = (window.GWNet && window.GWNet.state) ? window.GWNet.state.apiBase : '';
       const res = await fetch(apiBase + '/api/firebase-config');
       if (!res.ok) throw new Error('Firebase config endpoint returned ' + res.status);
       const cfg = await res.json();

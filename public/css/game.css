@@ -7,8 +7,11 @@ body.game-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100vw;
+  width: 100%;
   height: 100vh;
+  height: 100dvh;
+  min-height: 100svh;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   overflow: hidden;
 }
 
@@ -16,15 +19,57 @@ body.game-page {
 #game-container {
   position: relative;
   z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   /* Phaser handles its own sizing — we just need this present */
 }
 
 #game-container canvas {
   display: block;
+  max-width: 100%;
+  max-height: 100%;
   /* Prevent any unwanted margin/gap under canvas */
   vertical-align: bottom;
   /* Touch-action: none stops browser panning/zooming on canvas touch */
   touch-action: none;
+}
+
+#orientation-prompt[hidden] { display: none; }
+#orientation-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: rgba(4, 10, 18, 0.97);
+  color: #e8f0ff;
+  text-align: center;
+}
+.orientation-prompt__icon {
+  width: 64px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  border-radius: 12px;
+  color: #22d3ee;
+  font-size: 42px;
+  animation: orientationTurn 2.4s ease-in-out infinite;
+}
+#orientation-prompt h1 { font: 800 1rem 'Exo 2', sans-serif; color: #67e8f9; }
+#orientation-prompt p { max-width: 300px; color: #a9bac9; font: 500 0.9rem/1.6 'Exo 2', sans-serif; }
+@keyframes orientationTurn { 50% { transform: rotate(90deg); } }
+@media (orientation: portrait) and (pointer: coarse) {
+  #orientation-prompt { display: flex; }
 }
 
 /* ── Loading Screen ──────────────────────────────────────── */
@@ -101,6 +146,19 @@ body.game-page {
   letter-spacing: 0.08em;
   margin-bottom: 28px;
   text-shadow: 0 0 16px rgba(74,222,128,0.5);
+}
+
+#load-screen .loading-audio-toggle {
+  position: relative;
+  z-index: 2;
+  margin-top: 18px;
+  padding: 9px 14px;
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  border-radius: 4px;
+  background: rgba(8, 145, 178, 0.12);
+  color: #e8f0ff;
+  font: 700 11px 'Exo 2', sans-serif;
+  cursor: pointer;
 }
 
 .load-bar-wrap {

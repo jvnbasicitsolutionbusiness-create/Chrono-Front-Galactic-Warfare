@@ -20,6 +20,12 @@
     return;
   }
 
+  let pixelArt = GW.DISPLAY.PIXEL_ART !== false;
+  try {
+    const saved = JSON.parse(localStorage.getItem('gwr_progression_v2') || '{}');
+    if (saved.settings && saved.settings.pixelArt != null) pixelArt = !!saved.settings.pixelArt;
+  } catch (_) {}
+
   const config = {
     type: Phaser.AUTO,
     width:  GW.DISPLAY.BASE_WIDTH,   // 960
@@ -47,9 +53,9 @@
       gamepad:  false,
     },
     render: {
-      antialias:         true,
-      pixelArt:          GW.DISPLAY.PIXEL_ART || false,
-      roundPixels:       GW.DISPLAY.PIXEL_ART || false,
+      antialias:         !pixelArt,
+      pixelArt,
+      roundPixels:       pixelArt,
       transparent:       false,
       clearBeforeRender: true,
     },
@@ -59,17 +65,35 @@
 
   try {
     const game = new Phaser.Game(config);
-
-    if (window.location && window.location.hostname === 'localhost') {
-      window.__GW_GAME__ = game;
-    }
+    window.__GW_GAME__ = game;
+    window.__GW_ALLOW_NAVIGATION__ = false;
+    const gameUrl = window.location.href;
+    try {
+      window.history.replaceState({ gwGameGuard: true }, '', gameUrl);
+      window.history.pushState({ gwGameGuard: true }, '', gameUrl);
+    } catch (_) {}
 
     document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        game.scene.scenes.forEach(s => { if (s.scene.isActive()) s.scene.pause(); });
-      } else {
-        game.scene.scenes.forEach(s => { if (s.scene.isPaused()) s.scene.resume(); });
-      }
+      if (!document.hidden) return;
+      game.scene.scenes.forEach(scene => {
+        if (scene.scene.isActive() && scene.uiManager && !scene.uiManager.isPaused) {
+          scene.uiManager._openPauseMenu();
+        }
+      });
+    });
+    window.addEventListener('pagehide', () => {
+      game.scene.scenes.forEach(scene => {
+        if (scene._saveBattleSnapshot) scene._saveBattleSnapshot();
+      });
+    });
+    window.addEventListener('popstate', () => {
+      if (window.__GW_ALLOW_NAVIGATION__) return;
+      game.scene.scenes.forEach(scene => {
+        if (scene.scene.isActive() && scene.uiManager && !scene.uiManager.isPaused) {
+          scene.uiManager._openPauseMenu();
+        }
+      });
+      try { window.history.pushState({ gwGameGuard: true }, '', gameUrl); } catch (_) {}
     });
 
     console.log('[GW] Garden Warfare: Reborn — initialized 960×600');

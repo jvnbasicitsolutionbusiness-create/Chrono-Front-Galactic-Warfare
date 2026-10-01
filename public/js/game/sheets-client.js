@@ -31,6 +31,7 @@
 GW.SheetsClient = class SheetsClient {
   constructor() {
     this._url   = null;   // Apps Script web-app URL (loaded once)
+    this._apiBase = '';
     this.ready  = false;
     this._queue = [];     // pending calls before init completes
   }
@@ -39,9 +40,10 @@ GW.SheetsClient = class SheetsClient {
   async init() {
     if (this.ready) return;
     try {
-      // Use absolute URL if served outside Express (Live Server, file://, etc.)
-      const apiBase = (window.location.port === '3000' || window.location.protocol === 'https:')
-        ? '' : 'http://localhost:3000';
+      // Resolve the API base first so we never probe a hardcoded foreign port.
+      if (window.GWNet && window.GWNet.probeBackend) await window.GWNet.probeBackend();
+      const apiBase = (window.GWNet && window.GWNet.state) ? window.GWNet.state.apiBase : '';
+      this._apiBase = apiBase;
       const res  = await fetch(apiBase + '/api/sheets-url');
       const data = await res.json();
       if (!data.url) throw new Error('No Sheets URL returned from server');
@@ -50,24 +52,37 @@ GW.SheetsClient = class SheetsClient {
       // Flush any queued calls
       this._queue.forEach(fn => fn());
       this._queue = [];
+      const progression = window.GW && window.GW.progression;
+      if (progression && progression.state && !progression.isGuest) {
+        const user = (() => { try { return JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) { return {}; } })();
+        this.saveProgression(user.email || progression.state.playerName, progression.state);
+      }
       console.log('[Sheets] Client ready.');
     } catch (e) {
-      console.warn('[Sheets] Init failed — data will be localStorage-only.', e.message);
-      this.ready = false;
+      try {
+        this._url = window.GWNet && await window.GWNet.resolveAppsScript();
+        this.ready = !!this._url;
+      } catch (_) { this.ready = false; }
+      if (!this.ready) console.warn('[Sheets] Init failed — data will be localStorage-only.', e.message);
     }
   }
 
   // ── Internal POST ──────────────────────────────────────────────────────────
   async safePost(payload) {
     if (!this._url) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 2500);
     try {
       await fetch(this._url, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body:    JSON.stringify(payload),
+        signal:  controller.signal,
       });
     } catch (e) {
       console.warn('[Sheets] POST failed (non-fatal):', e.message);
+    } finally {
+      window.clearTimeout(timeout);
     }
   }
 
@@ -77,13 +92,32 @@ GW.SheetsClient = class SheetsClient {
     if (!uid || !state) return;
     // localStorage is always the fast primary store
     try { localStorage.setItem('gwr_progression_v2', JSON.stringify(state)); } catch (_) {}
-    // Sheets sync (fire-and-forget)
-    if (this.ready) {
-      this.safePost({
-        action:           'saveProgression',
-        uid,
+    if (!this.ready) return;
+    const token = localStorage.getItem('gw_session_token') || localStorage.getItem('gw_id_token');
+    const backend = window.GWNet && window.GWNet.state && window.GWNet.state.backend;
+    if (backend && token) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 2500);
+      try {
+        await fetch(this._apiBase + '/api/auth/progression', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({ token, progression: state }),
+          signal: controller.signal,
+        });
+      } catch (_) {
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    } else {
+      const user = (() => { try { return JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) { return {}; } })();
+      await this.safePost({
+        action: 'saveProgression',
+        uid: user.email || uid,
+        commanderName: state.playerName || '',
         progression_json: JSON.stringify(state),
-        saved_at:         new Date().toISOString(),
+        saved_at: new Date().toISOString(),
       });
     }
   }

@@ -22,14 +22,20 @@ GW.Enemy = class Enemy {
     this.x        = x;
     this.y        = y;
 
-    // Base HP — always 100 for common alien
-    this.maxHp    = def.hp;   // 100
+    this.maxHp    = def.hp;
     this.hp       = def.hp;
 
-    this.speed    = def.speed;           // 28 px/s
-    this.damage   = def.damage;          // 10
+    this.speed    = def.speed;
+    this.damage   = def.damage;          // base damage; scales at low HP
     this.attackCooldown = def.attackCooldown;
     this.reward   = def.reward;
+
+    // Stick-swing state for vex_drone / stick weapon enemies
+    this._stickAngle    = 0;    // current swing angle (radians)
+    this._swingDir      = 1;    // +1 forward, -1 return
+    this._swingActive   = false;
+    this._hitDelivered  = false; // prevent multi-hit per swing
+    this._stickGfx      = null; // graphics object for the stick
 
     // Equipment system (cap/helmet/shield)
     this.equipment     = null;  // current equipment def
@@ -113,6 +119,14 @@ GW.Enemy = class Enemy {
     this.hpBar = this.scene.add.graphics();
     this.container.add(this.hpBar);
     this._updateHpBar();
+
+    // ── Stick weapon graphics (for vex_drone and stick-type enemies) ────────
+    if (this.def.weaponType === 'stick') {
+      this._stickGfx = this.scene.add.graphics();
+      this._stickGfx.setDepth(16);
+      this.container.add(this._stickGfx);
+      this._drawStick(0); // initial resting position
+    }
   }
 
   /**
@@ -245,6 +259,20 @@ GW.Enemy = class Enemy {
         this.animator.play('attack', 8);
       }
 
+      // ── Stick-swing attack ──────────────────────────────
+      if (this.def.weaponType === 'stick') {
+        if (this.attackTimer <= 0) {
+          this.attackTimer = this.attackCooldown;
+          this._startStickSwing(blocker);
+        }
+        // Animate swing while active
+        if (this._swingActive) {
+          this._updateStickSwing(delta, blocker);
+        }
+        return null; // damage handled inside swing, not here
+      }
+
+      // Default (non-stick) attack
       if (this.attackTimer <= 0) {
         this.attackTimer = this.attackCooldown;
         return { attack: true, target: blocker };
@@ -253,6 +281,11 @@ GW.Enemy = class Enemy {
       this.blocked      = false;
       this.attackTarget = null;
       this.attackTimer  = Math.max(0, this.attackTimer - delta);
+
+      // Return stick to rest when not attacking
+      if (this.def.weaponType === 'stick' && !this._swingActive) {
+        this._drawStick(0);
+      }
 
       // Switch to walk animation while moving
       if (this.animator && this._animState !== 'walk') {
@@ -275,6 +308,96 @@ GW.Enemy = class Enemy {
     }
 
     return null;
+  }
+
+  // ── Stick weapon drawing ──────────────────────────────────
+  // Draws on the right arm of the alien (right side = toward the target/home base).
+  // angle: radians — 0 = resting at side, positive swings left (toward target)
+  _drawStick(angle) {
+    if (!this._stickGfx) return;
+    const g     = this._stickGfx;
+    // v1.0.1: light-purple colour, right-arm pivot
+    const color = 0xc4b5fd;  // light purple (as seen in sprite reference)
+    const len   = 28;
+    // Pivot at the alien's RIGHT hand position (right side, mid-body)
+    const pivX = 18;
+    const pivY = 5;
+    // Swing toward the left (toward home base / target)
+    // angle=0 → stick points right (resting); positive angle → swings left
+    const endX = pivX + Math.cos(Math.PI - angle) * len;
+    const endY = pivY + Math.sin(Math.PI - angle) * len;
+
+    g.clear();
+    // Stick shadow
+    g.lineStyle(4, 0x3b0764, 0.35);
+    g.beginPath(); g.moveTo(pivX + 1, pivY + 2); g.lineTo(endX + 1, endY + 2); g.strokePath();
+    // Stick body — light purple
+    g.lineStyle(4, color, 1);
+    g.beginPath(); g.moveTo(pivX, pivY); g.lineTo(endX, endY); g.strokePath();
+    // Bright tip
+    g.fillStyle(0xf0abfc, 0.95);  // even lighter pink-purple tip
+    g.fillCircle(endX, endY, 4);
+    g.fillStyle(0xffffff, 0.55);
+    g.fillCircle(endX, endY, 2);
+  }
+
+  _startStickSwing(target) {
+    if (this._swingActive) return;
+    this._swingActive  = true;
+    this._swingDir     = 1;
+    this._stickAngle   = 0;
+    this._hitDelivered = false;
+    this._swingTarget  = target;
+  }
+
+  _updateStickSwing(delta, blocker) {
+    const SWING_SPEED = 6.5; // radians per second
+    const MAX_ANGLE   = Math.PI * 0.75; // ~135° forward swing
+    const dt          = delta / 1000;
+
+    this._stickAngle += SWING_SPEED * this._swingDir * dt;
+
+    if (this._swingDir === 1 && this._stickAngle >= MAX_ANGLE) {
+      this._stickAngle = MAX_ANGLE;
+      this._swingDir   = -1; // start returning
+
+      // Hit moment: deliver damage at peak of swing
+      if (!this._hitDelivered && blocker && blocker.alive) {
+        const dmg = this._calcScaledDamage();
+        if (window.GWAudio) window.GWAudio.play(this.def.attackSound || 'alien-melee');
+        blocker.takeDamage(dmg);
+        this._hitDelivered = true;
+        // Impact flash on stick tip
+        this._spawnStickHitFx();
+      }
+    } else if (this._swingDir === -1 && this._stickAngle <= 0) {
+      this._stickAngle = 0;
+      this._swingActive = false; // swing complete
+    }
+
+    this._drawStick(this._stickAngle);
+  }
+
+  /** Base 20 damage; scales +30–50% as HP drops toward 0. */
+  _calcScaledDamage() {
+    const base     = this.def.damage || 20;
+    const hpRatio  = Math.max(0, Math.min(1, this.hp / this.maxHp));
+    // At full HP: 0% bonus. At 0 HP: 50% bonus. Linear interpolation.
+    const bonus    = (1 - hpRatio) * 0.50;            // 0 → 0.50
+    const clampedBonus = Math.min(0.50, Math.max(0, bonus)); // cap at 50%
+    return Math.round(base * (1 + clampedBonus));
+  }
+
+  _spawnStickHitFx() {
+    const scene = this.scene;
+    // Purple spark at the alien's RIGHT arm tip (toward the target)
+    const fx = scene.add.graphics().setDepth(25);
+    fx.fillStyle(0xf0abfc, 0.9);
+    fx.fillCircle(this.x + 28, this.y + 5, 8);
+    scene.tweens.add({
+      targets: fx, scaleX: 2.5, scaleY: 2.5, alpha: 0, duration: 180,
+      ease: 'Power2', onComplete: () => fx.destroy(),
+    });
   }
 
   _findBlocker(characters) {
@@ -428,6 +551,7 @@ GW.Enemy = class Enemy {
 
   destroy() {
     if (this.animator) { this.animator.destroy(); this.animator = null; }
+    if (this._stickGfx) { this._stickGfx.destroy(); this._stickGfx = null; }
     if (this.container) {
       this.container.destroy(true);
       this.container = null;

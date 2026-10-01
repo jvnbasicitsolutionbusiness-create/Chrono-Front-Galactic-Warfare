@@ -1,693 +1,508 @@
 /**
- * ============================================================
- * CHRONO-FRONT: GALACTIC WAR
- * Authentication System
- * File: ./public/js/auth.js
- * ============================================================
+ * Chrono-Front: Galactic War — Client-side Auth
  *
- * Features:
- * - Login and registration
- * - Client-side validation
- * - Password strength indicator
- * - Session persistence
- * - Server-side session verification
- * - Error handling
+ * REGISTRATION FLOW
+ * ─────────────────
+ * 1. Client-side validation (email, password ≥ 8 chars, commander name 3-24 chars,
+ *    passwords match).
+ * 2. POST /api/auth/register  { email, password, commanderName }
+ *    → Server forwards to Apps Script → Apps Script hashes password, writes row.
+ *    → Server returns 201 ONLY after Apps Script confirms success:true.
+ * 3. Store token + user in localStorage → redirect to index.html.
  *
- * Backend endpoints:
- * POST /api/auth/register
- * POST /api/auth/login
- * POST /api/auth/verify
+ * LOGIN FLOW
+ * ──────────
+ * 1. POST /api/auth/login  { email, password }
+ *    → Server forwards to Apps Script → Apps Script re-hashes, compares.
+ * 2. Store token + user → redirect to index.html.
+ *
+ * SESSION CHECK
+ * ─────────────
+ * POST /api/auth/verify  { token }
+ * Success → skip auth page.  Failure → clear session, show form.
+ *
+ * TOKEN STORAGE
+ * ─────────────
+ * localStorage key 'gw_session_token'  — HMAC-signed server token
+ * localStorage key 'gw_user'           — { email, commanderName }
+ * localStorage key 'gw_id_token'       — alias kept for auth guards in
+ *                                         index.html / game.html
  */
 
-"use strict";
+'use strict';
 
-(() => {
-  // ==========================================================
-  // CONFIGURATION
-  // ==========================================================
+(function () {
 
-  const TOKEN_KEY = "gw_session_token";
-  const LEGACY_TOKEN_KEY = "gw_id_token";
-  const USER_KEY = "gw_user";
+  /* ── Constants ─────────────────────────────────────────── */
+  const TOKEN_KEY    = 'gw_session_token';
+  const USER_KEY     = 'gw_user';
+  const REDIRECT_URL = 'index.html';
+  const DEVICE_ID    = (window.GWNet && window.GWNet.deviceId) || 'default-device';
+  const LOCK_KEY     = 'gw_login_lock:' + DEVICE_ID;
+  const LEGACY_LOCK_KEY = 'gw_login_lock';
+  const MAX_ATTEMPTS = 5;
+  const LOCK_DURATION = 5 * 60 * 1000; // 5 minutes (300,000 ms)
+  const SAVED_SESSION_WINDOW = 7 * 24 * 60 * 60 * 1000;
 
-  const REDIRECT_URL = "./index.html";
+  // All network access goes through window.GWNet (public/js/runtime.js), which
+  // auto-detects the Express backend and falls back to a direct Google Apps
+  // Script connection on static hosts (GitHub Pages). This makes login and
+  // registration work identically on Live Server, Five Server, Render, Vercel
+  // and GitHub Pages.
+  const Net = window.GWNet;
 
-  // IMPORTANT:
-  // Use your deployed Express backend's ROOT URL.
-  // Do not include /api/auth here.
-  const API_BASE = "https://galactic-warfare-backend.onrender.com/";
+  /* ── DOM refs ──────────────────────────────────────────── */
+  let tabLogin, tabRegister, sectionLogin, sectionRegister;
+  let formLogin,    loginEmail,   loginPassword,  loginStatus,  loginBtn;
+  let formRegister, regUsername,  regEmail,       regPassword,  regConfirm;
+  let regStrengthBar, regStatus,  regBtn;
+  let continueSessionBtn, continueSessionNote, guestModeBtn;
+  let lockoutInterval = null;
 
-  const API_TIMEOUT = 20000;
-
-  // ==========================================================
-  // DOM ELEMENTS
-  // ==========================================================
-
-  const $ = (id) => document.getElementById(id);
-
-  const elements = {
-    tabLogin: $("tabLogin"),
-    tabRegister: $("tabRegister"),
-
-    sectionLogin: $("sectionLogin"),
-    sectionRegister: $("sectionRegister"),
-
-    formLogin: $("formLogin"),
-    formRegister: $("formRegister"),
-
-    loginEmail: $("loginEmail"),
-    loginPassword: $("loginPassword"),
-    loginStatus: $("loginStatus"),
-    loginBtn: $("loginBtn"),
-
-    regUsername: $("regUsername"),
-    regEmail: $("regEmail"),
-    regPassword: $("regPassword"),
-    regConfirm: $("regConfirm"),
-    regStrengthBar: $("regStrengthBar"),
-    regStatus: $("regStatus"),
-    regBtn: $("regBtn")
-  };
-
-  // ==========================================================
-  // INITIALIZATION
-  // ==========================================================
-
-  document.addEventListener("DOMContentLoaded", initialize);
-
-  async function initialize() {
-    bindTabs();
-    bindForms();
-    bindPasswordStrength();
-
-    switchTab("login");
-
-    const token =
-      localStorage.getItem(TOKEN_KEY) ||
-      localStorage.getItem(LEGACY_TOKEN_KEY);
-
-    if (!token) return;
-
-    const verified = await verifyToken(token);
-
-    if (verified) {
-      window.location.replace(REDIRECT_URL);
-      return;
+  /* ── Lockout Helpers ───────────────────────────────────── */
+  function getLockState() {
+    try {
+      const raw = localStorage.getItem(LOCK_KEY);
+      if (!raw) {
+        const legacy = localStorage.getItem(LEGACY_LOCK_KEY);
+        if (!legacy) return { attempts: 0, lockedUntil: 0 };
+        localStorage.setItem(LOCK_KEY, legacy);
+        localStorage.removeItem(LEGACY_LOCK_KEY);
+        return JSON.parse(legacy);
+      }
+      const parsed = JSON.parse(raw);
+      const now = Date.now();
+      if (parsed.lockedUntil && now >= parsed.lockedUntil) {
+        localStorage.removeItem(LOCK_KEY);
+        return { attempts: 0, lockedUntil: 0 };
+      }
+      return parsed;
+    } catch (_) {
+      return { attempts: 0, lockedUntil: 0 };
     }
-
-    clearSession();
   }
 
-  // ==========================================================
-  // TAB SWITCHING
-  // ==========================================================
+  function saveLockState(state) {
+    try {
+      localStorage.setItem(LOCK_KEY, JSON.stringify(state));
+    } catch (_) {}
+  }
+
+  function clearLockState() {
+    try {
+      localStorage.removeItem(LOCK_KEY);
+      localStorage.removeItem(LEGACY_LOCK_KEY);
+    } catch (_) {}
+    if (lockoutInterval) {
+      clearInterval(lockoutInterval);
+      lockoutInterval = null;
+    }
+    if (loginBtn) {
+      loginBtn.disabled = false;
+      loginBtn.classList.remove('locked');
+      loginBtn.textContent = 'DEPLOY TO BASE';
+    }
+    if (loginEmail) loginEmail.disabled = false;
+    if (loginPassword) loginPassword.disabled = false;
+    if (continueSessionBtn) continueSessionBtn.disabled = false;
+  }
+
+  function startLockoutTimer(lockedUntil) {
+    if (lockoutInterval) clearInterval(lockoutInterval);
+
+    function tick() {
+      const now = Date.now();
+      const remainingSeconds = Math.max(0, Math.ceil((lockedUntil - now) / 1000));
+      if (remainingSeconds <= 0) {
+        clearLockState();
+        showStatus(loginStatus, 'Lockout period ended. Authentication attempts have been reset. You may now sign in.', 'success');
+        return;
+      }
+      const mins = Math.floor(remainingSeconds / 60);
+      const secs = remainingSeconds % 60;
+      const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      showStatus(
+        loginStatus,
+        `Authentication locked: 5 failed attempts reached. Please wait ${timeStr} before signing in.`,
+        'error'
+      );
+      if (loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.classList.add('locked');
+        loginBtn.textContent = `LOCKED (${timeStr})`;
+      }
+      if (loginEmail) loginEmail.disabled = true;
+      if (loginPassword) loginPassword.disabled = true;
+      if (continueSessionBtn) continueSessionBtn.disabled = true;
+    }
+
+    tick();
+    lockoutInterval = setInterval(tick, 1000);
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     ENTRY POINT
+  ══════════════════════════════════════════════════════════ */
+  document.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    bindDomRefs();
+    bindTabs();
+    bindForms();
+    bindEntryChoices();
+
+    const savedToken = localStorage.getItem(TOKEN_KEY) || localStorage.getItem('gw_id_token');
+    const lastLoginAt = Number(localStorage.getItem('gw_last_login_at')) || 0;
+    const savedSessionRecent = !!savedToken && lastLoginAt > 0 && Date.now() - lastLoginAt < SAVED_SESSION_WINDOW;
+    if (continueSessionBtn) continueSessionBtn.hidden = !savedSessionRecent;
+    if (continueSessionNote) continueSessionNote.hidden = !savedSessionRecent;
+    if (savedToken && !savedSessionRecent) localStorage.removeItem('gw_last_login_at');
+
+    // Check for active lockout
+    const lock = getLockState();
+    if (lock.lockedUntil && Date.now() < lock.lockedUntil) {
+      startLockoutTimer(lock.lockedUntil);
+    } else if (lock.attempts > 0) {
+      const remaining = MAX_ATTEMPTS - lock.attempts;
+      showStatus(loginStatus, `Incorrect email or password. Attempt ${lock.attempts} of ${MAX_ATTEMPTS} (${remaining} attempt${remaining === 1 ? '' : 's'} remaining).`, 'error');
+    }
+
+    // Deep-link: auth.html?tab=register
+    if (new URLSearchParams(window.location.search).get('tab') === 'register') {
+      switchTab('register');
+    }
+
+    // Keep the auth page available for account switching; validate saved sessions quietly.
+    const saved = localStorage.getItem(TOKEN_KEY);
+    if (saved) {
+      verifyTokenQuiet(saved).then(ok => {
+        if (!ok && localStorage.getItem(TOKEN_KEY) === saved) clearSession();
+      }).catch(() => {});
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     DOM BINDING
+  ══════════════════════════════════════════════════════════ */
+  function bindDomRefs() {
+    tabLogin        = document.getElementById('tabLogin');
+    tabRegister     = document.getElementById('tabRegister');
+    sectionLogin    = document.getElementById('sectionLogin');
+    sectionRegister = document.getElementById('sectionRegister');
+
+    formLogin     = document.getElementById('formLogin');
+    loginEmail    = document.getElementById('loginEmail');
+    loginPassword = document.getElementById('loginPassword');
+    loginStatus   = document.getElementById('loginStatus');
+    loginBtn      = document.getElementById('loginBtn');
+
+    formRegister   = document.getElementById('formRegister');
+    regUsername    = document.getElementById('regUsername');   // Commander Name input
+    regEmail       = document.getElementById('regEmail');
+    regPassword    = document.getElementById('regPassword');
+    regConfirm     = document.getElementById('regConfirm');
+    regStrengthBar = document.getElementById('regStrengthBar');
+    regStatus      = document.getElementById('regStatus');
+    regBtn         = document.getElementById('regBtn');
+  }
 
   function bindTabs() {
-    elements.tabLogin?.addEventListener("click", () => {
-      switchTab("login");
-    });
-
-    elements.tabRegister?.addEventListener("click", () => {
-      switchTab("register");
-    });
-
-    $("linkToRegister")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      switchTab("register");
-    });
-
-    $("linkToLogin")?.addEventListener("click", (event) => {
-      event.preventDefault();
-      switchTab("login");
-    });
+    tabLogin?.addEventListener('click',    () => switchTab('login'));
+    tabRegister?.addEventListener('click', () => switchTab('register'));
   }
 
   function switchTab(tab) {
-    const isLogin = tab === "login";
-
-    elements.tabLogin?.classList.toggle("active", isLogin);
-    elements.tabRegister?.classList.toggle("active", !isLogin);
-
-    elements.tabLogin?.setAttribute(
-      "aria-selected",
-      String(isLogin)
-    );
-
-    elements.tabRegister?.setAttribute(
-      "aria-selected",
-      String(!isLogin)
-    );
-
-    elements.sectionLogin?.classList.toggle("active", isLogin);
-    elements.sectionRegister?.classList.toggle("active", !isLogin);
-
-    if (elements.sectionLogin) {
-      elements.sectionLogin.hidden = !isLogin;
-    }
-
-    if (elements.sectionRegister) {
-      elements.sectionRegister.hidden = isLogin;
-    }
-
-    clearStatus(elements.loginStatus);
-    clearStatus(elements.regStatus);
+    const isLogin = (tab === 'login');
+    tabLogin?.classList.toggle('active',  isLogin);
+    tabRegister?.classList.toggle('active', !isLogin);
+    tabLogin?.setAttribute('aria-selected', String(isLogin));
+    tabRegister?.setAttribute('aria-selected', String(!isLogin));
+    sectionLogin?.classList.toggle('active',  isLogin);
+    sectionRegister?.classList.toggle('active', !isLogin);
+    clearStatus(loginStatus);
+    clearStatus(regStatus);
   }
-
-  // ==========================================================
-  // FORM EVENTS
-  // ==========================================================
 
   function bindForms() {
-    elements.formLogin?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await handleLogin();
-    });
-
-    elements.formRegister?.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await handleRegister();
-    });
+    regPassword?.addEventListener('input', () => updateStrength(regPassword.value));
+    formLogin?.addEventListener('submit',    async e => { e.preventDefault(); await handleLogin(); });
+    formRegister?.addEventListener('submit', async e => { e.preventDefault(); await handleRegister(); });
   }
 
-  // ==========================================================
-  // PASSWORD STRENGTH
-  // ==========================================================
-
-  function bindPasswordStrength() {
-    elements.regPassword?.addEventListener("input", () => {
-      updatePasswordStrength(elements.regPassword.value);
-    });
-  }
-
-  function updatePasswordStrength(password) {
-    const bar = elements.regStrengthBar;
-
-    if (!bar) return;
-
-    let score = 0;
-
-    if (password.length >= 8) score++;
-    if (password.length >= 12) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
-
-    const colors = [
-      "#ef4444",
-      "#f97316",
-      "#eab308",
-      "#22d3ee",
-      "#4ade80"
-    ];
-
-    bar.style.width = `${(score / 5) * 100}%`;
-
-    bar.style.background =
-      score > 0 ? colors[score - 1] : "transparent";
-  }
-
-  // ==========================================================
-  // API REQUEST
-  // ==========================================================
-
-  async function apiPost(endpoint, payload) {
-    const base = API_BASE.trim().replace(/\/+$/, "");
-
-    if (
-      !base ||
-      base.includes("YOUR-BACKEND") ||
-      base.includes("YOUR_BACKEND")
-    ) {
-      return {
-        ok: false,
-        status: 0,
-        data: {
-          error: "Backend URL is not configured in auth.js."
-        }
-      };
-    }
-
-    const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, API_TIMEOUT);
-
-    try {
-      const response = await fetch(`${base}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Accept": "application/json"
-        },
-        credentials: "omit",
-        body: JSON.stringify(payload),
-        signal: controller.signal
-      });
-
-      const text = await response.text();
-
-      let data = {};
-
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch {
-        data = {
-          error: "The server returned an invalid response."
-        };
+  function bindEntryChoices() {
+    continueSessionBtn = document.getElementById('continueSessionBtn');
+    continueSessionNote = document.getElementById('continueSessionNote');
+    guestModeBtn = document.getElementById('guestModeBtn');
+    continueSessionBtn?.addEventListener('click', async () => {
+      const lock = getLockState();
+      if (lock.lockedUntil && Date.now() < lock.lockedUntil) {
+        startLockoutTimer(lock.lockedUntil);
+        return;
       }
-
-      return {
-        ok: response.ok,
-        status: response.status,
-        data
-      };
-
-    } catch (error) {
-      const message =
-        error.name === "AbortError"
-          ? "The server took too long to respond. Please try again."
-          : "Cannot connect to the authentication server. Check your backend URL, CORS settings, and server status.";
-
-      return {
-        ok: false,
-        status: 0,
-        data: { error: message }
-      };
-
-    } finally {
-      clearTimeout(timeout);
-    }
+      const token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem('gw_id_token');
+      if (!token) { continueSessionBtn.hidden = true; return; }
+      continueSessionBtn.disabled = true;
+      const result = await Net.verify(token);
+      continueSessionBtn.disabled = false;
+      if (result && result.locked) {
+        const lockedUntil = result.lockedUntil || (Date.now() + (result.remainingSeconds || 300) * 1000);
+        saveLockState({ attempts: MAX_ATTEMPTS, lockedUntil });
+        startLockoutTimer(lockedUntil);
+        return;
+      }
+      if (!result || !result.ok) {
+        clearSession();
+        continueSessionBtn.hidden = true;
+        showStatus(loginStatus, 'Saved session expired. Sign in to continue.', 'error');
+        return;
+      }
+      sessionStorage.removeItem('gw_guess_mode');
+      sessionStorage.setItem('gw_mode', 'registered');
+      sessionStorage.setItem('gw_entry_authorized', '1');
+      localStorage.setItem('gw_last_login_at', String(Date.now()));
+      window.location.replace(REDIRECT_URL);
+    });
+    guestModeBtn?.addEventListener('click', () => {
+      sessionStorage.setItem('gw_guess_mode', '1');
+      sessionStorage.setItem('gw_mode', 'guest');
+      sessionStorage.setItem('gw_entry_authorized', '1');
+      window.location.replace(REDIRECT_URL);
+    });
   }
 
-  // ==========================================================
-  // LOGIN
-  // ==========================================================
-
+  /* ══════════════════════════════════════════════════════════
+     LOGIN
+  ══════════════════════════════════════════════════════════ */
   async function handleLogin() {
-    clearStatus(elements.loginStatus);
+    clearStatus(loginStatus);
 
-    const email =
-      elements.loginEmail?.value.trim().toLowerCase() || "";
-
-    const password =
-      elements.loginPassword?.value || "";
-
-    if (!isValidEmail(email)) {
-      showStatus(
-        elements.loginStatus,
-        "Please enter a valid email address.",
-        "error"
-      );
-
-      elements.loginEmail?.focus();
+    const lock = getLockState();
+    if (lock.lockedUntil && Date.now() < lock.lockedUntil) {
+      startLockoutTimer(lock.lockedUntil);
       return;
     }
 
-    if (!password) {
-      showStatus(
-        elements.loginStatus,
-        "Please enter your password.",
-        "error"
-      );
+    const email    = loginEmail?.value.trim()  || '';
+    const password = loginPassword?.value       || '';
 
-      elements.loginPassword?.focus();
+    if (!email || !password) {
+      showStatus(loginStatus, 'Please enter your email and password.', 'error');
       return;
     }
 
-    setLoading(elements.loginBtn, true, "AUTHENTICATING...");
+    window.GWAudio?.setScene('loading');
+    setLoading(loginBtn, true);
 
-    try {
-      const result = await apiPost("/api/auth/login", {
-        email,
-        password
-      });
+    const { ok, status, data, networkError } =
+      await Net.auth('login', { email, password });
 
-      if (!isSuccessful(result)) {
-        showStatus(
-          elements.loginStatus,
-          getErrorMessage(result, "Login failed."),
-          "error"
-        );
-        return;
-      }
+    setLoading(loginBtn, false);
 
-      const data = result.data;
-
-      if (!data.token) {
-        showStatus(
-          elements.loginStatus,
-          "The server did not return a session token. Please try again.",
-          "error"
-        );
-        return;
-      }
-
-      const commanderName =
-        data.commanderName ||
-        data.username ||
-        email.split("@")[0];
-
-      persistSession(data.token, {
-        email: data.email || email,
-        commanderName,
-        progress: data.progress || {}
-      });
-
-      showStatus(
-        elements.loginStatus,
-        `Welcome back, ${commanderName}! Establishing uplink...`,
-        "success"
-      );
-
-      setTimeout(() => {
-        window.location.replace(REDIRECT_URL);
-      }, 900);
-
-    } catch (error) {
-      console.error("[Auth] Login error:", error);
-
-      showStatus(
-        elements.loginStatus,
-        "An unexpected error occurred during login.",
-        "error"
-      );
-
-    } finally {
-      setLoading(elements.loginBtn, false);
+    if (networkError) {
+      window.GWAudio?.setScene('auth');
+      showStatus(loginStatus, 'Cannot reach the server. Is it running?', 'error');
+      return;
     }
+
+    if (status === 503) {
+      window.GWAudio?.setScene('auth');
+      showStatus(loginStatus, 'The database is temporarily unavailable. Please try again.', 'error');
+      return;
+    }
+
+    if (status === 429 || data?.locked) {
+      window.GWAudio?.setScene('auth');
+      const lockedUntil = data.lockedUntil || (Date.now() + (data.remainingSeconds ? data.remainingSeconds * 1000 : LOCK_DURATION));
+      saveLockState({ attempts: MAX_ATTEMPTS, lockedUntil });
+      startLockoutTimer(lockedUntil);
+      return;
+    }
+
+    if (!ok) {
+      window.GWAudio?.setScene('auth');
+      const currentLock = getLockState();
+      const localAttempts = currentLock.attempts + 1;
+      const currentAttempts = Math.min(MAX_ATTEMPTS, Math.max(localAttempts, Number(data.attempts) || 0));
+
+      if (currentAttempts >= MAX_ATTEMPTS) {
+        const lockedUntil = Date.now() + LOCK_DURATION;
+        saveLockState({ attempts: MAX_ATTEMPTS, lockedUntil });
+        startLockoutTimer(lockedUntil);
+        return;
+      }
+
+      saveLockState({ attempts: currentAttempts, lockedUntil: 0 });
+      const remaining = MAX_ATTEMPTS - currentAttempts;
+      showStatus(
+        loginStatus,
+        data.error || `Incorrect email or password. Attempt ${currentAttempts} of ${MAX_ATTEMPTS} (${remaining} attempt${remaining === 1 ? '' : 's'} remaining).`,
+        'error'
+      );
+      return;
+    }
+
+    // ── Successful Sign-In (resets attempts even after 2, 3, or 5 attempts) ──
+    clearLockState();
+
+    // Server returns { ok, email, commanderName, token, progress }
+    const commanderName = data.commanderName || data.username || email.split('@')[0];
+    if (data.progression && typeof data.progression === 'object') {
+      try { localStorage.setItem('gwr_progression_v2', JSON.stringify(data.progression)); } catch (_) {}
+    }
+    persistSession(data.token, { email: data.email || email, commanderName });
+    sessionStorage.removeItem('gw_guess_mode');
+    sessionStorage.setItem('gw_mode', 'registered');
+    sessionStorage.setItem('gw_entry_authorized', '1');
+
+    showStatus(loginStatus, `Welcome back, ${commanderName}. Establishing uplink…`, 'success');
+    setTimeout(() => window.location.replace(REDIRECT_URL), 800);
   }
 
-  // ==========================================================
-  // REGISTRATION
-  // ==========================================================
-
+  /* ══════════════════════════════════════════════════════════
+     REGISTER
+  ══════════════════════════════════════════════════════════ */
   async function handleRegister() {
-    clearStatus(elements.regStatus);
+    window.GWAudio?.setScene('loading');
+    clearStatus(regStatus);
 
-    const commanderName =
-      elements.regUsername?.value.trim() || "";
+    // The "Commander Name" input is bound to regUsername DOM element
+    const commanderName = regUsername?.value.trim() || '';
+    const email         = regEmail?.value.trim()    || '';
+    const password      = regPassword?.value         || '';
+    const confirm       = regConfirm?.value           || '';
 
-    const email =
-      elements.regEmail?.value.trim().toLowerCase() || "";
+    /* ── Client-side validation ─────────────────────────── */
+    if (!commanderName || commanderName.length < 3 || commanderName.length > 24) {
+      showStatus(regStatus, 'Commander name must be 3–24 characters.', 'error');
+      regUsername?.focus(); return;
+    }
+    if (!/^[a-zA-Z0-9_\- ]+$/.test(commanderName)) {
+      showStatus(regStatus, 'Commander name: letters, numbers, spaces, _ or - only.', 'error');
+      regUsername?.focus(); return;
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showStatus(regStatus, 'Please enter a valid email address.', 'error');
+      regEmail?.focus(); return;
+    }
+    if (password.length < 12) {
+      showStatus(regStatus, 'Password must be at least 12 characters.', 'error');
+      regPassword?.focus(); return;
+    }
+    if (password !== confirm) {
+      showStatus(regStatus, 'Passwords do not match.', 'error');
+      regConfirm?.focus(); return;
+    }
 
-    const password =
-      elements.regPassword?.value || "";
+    setLoading(regBtn, true);
 
-    const confirmPassword =
-      elements.regConfirm?.value || "";
+    // GWNet routes to the Express backend, or straight to Apps Script on
+    // static hosts. Both accept 'commanderName'.
+    const { ok, status, data, networkError } =
+      await Net.auth('register', { email, password, commanderName });
 
-    // --------------------------------------------------------
-    // VALIDATION
-    // --------------------------------------------------------
+    setLoading(regBtn, false);
 
-    if (
-      commanderName.length < 3 ||
-      commanderName.length > 24
-    ) {
-      showStatus(
-        elements.regStatus,
-        "Commander name must be between 3 and 24 characters.",
-        "error"
-      );
-
-      elements.regUsername?.focus();
+    if (networkError) {
+      window.GWAudio?.setScene('auth');
+      showStatus(regStatus, 'Cannot reach the server. Is it running?', 'error');
       return;
     }
 
-    if (!/^[a-zA-Z0-9_-]+(?: [a-zA-Z0-9_-]+)*$/.test(commanderName)) {
-      showStatus(
-        elements.regStatus,
-        "Commander name can contain letters, numbers, spaces, underscores, and hyphens.",
-        "error"
-      );
-
-      elements.regUsername?.focus();
+    if (status === 503) {
+      window.GWAudio?.setScene('auth');
+      showStatus(regStatus, 'The database is temporarily unavailable. Please try again in a moment.', 'error');
       return;
     }
 
-    if (!isValidEmail(email)) {
-      showStatus(
-        elements.regStatus,
-        "Please enter a valid email address.",
-        "error"
-      );
-
-      elements.regEmail?.focus();
+    if (status === 409) {
+      window.GWAudio?.setScene('auth');
+      showStatus(regStatus, 'An account with that email already exists.', 'error');
       return;
     }
 
-    if (password.length < 8) {
-      showStatus(
-        elements.regStatus,
-        "Password must contain at least 8 characters.",
-        "error"
-      );
-
-      elements.regPassword?.focus();
+    if (!ok) {
+      window.GWAudio?.setScene('auth');
+      // Show the exact error from the server / Apps Script (e.g. validation messages)
+      showStatus(regStatus, data.error || data.message || 'Registration failed. Please try again.', 'error');
       return;
     }
 
-    if (password.length > 128) {
-      showStatus(
-        elements.regStatus,
-        "Password cannot exceed 128 characters.",
-        "error"
-      );
+    // Registration confirmed by Sheets — clear any lockout and persist session and redirect
+    clearLockState();
+    const resolvedName = data.commanderName || commanderName;
+    persistSession(data.token, { email: data.email || email, commanderName: resolvedName });
+    sessionStorage.removeItem('gw_guess_mode');
+    sessionStorage.setItem('gw_mode', 'registered');
+    sessionStorage.setItem('gw_entry_authorized', '1');
 
-      elements.regPassword?.focus();
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      showStatus(
-        elements.regStatus,
-        "Passwords do not match.",
-        "error"
-      );
-
-      elements.regConfirm?.focus();
-      return;
-    }
-
-    // --------------------------------------------------------
-    // SEND REGISTRATION REQUEST
-    // --------------------------------------------------------
-
-    setLoading(
-      elements.regBtn,
-      true,
-      "CREATING ACCOUNT..."
-    );
-
-    try {
-      const result = await apiPost("/api/auth/register", {
-        email,
-        password,
-        commanderName
-      });
-
-      if (!isSuccessful(result)) {
-        showStatus(
-          elements.regStatus,
-          getErrorMessage(result, "Registration failed."),
-          "error"
-        );
-
-        console.error("[Auth] Registration failed:", {
-          status: result.status,
-          response: result.data
-        });
-
-        return;
-      }
-
-      // ------------------------------------------------------
-      // STORE SESSION ONLY AFTER CONFIRMED SUCCESS
-      // ------------------------------------------------------
-
-      const data = result.data;
-
-      if (!data.token) {
-        showStatus(
-          elements.regStatus,
-          "The account may have been created, but the server did not return a session token. Please try logging in.",
-          "error"
-        );
-
-        return;
-      }
-
-      const resolvedName =
-        data.commanderName || commanderName;
-
-      persistSession(data.token, {
-        email: data.email || email,
-        commanderName: resolvedName,
-        progress: data.progress || {}
-      });
-
-      showStatus(
-        elements.regStatus,
-        `Account created successfully, ${resolvedName}! Deploying...`,
-        "success"
-      );
-
-      setTimeout(() => {
-        window.location.replace(REDIRECT_URL);
-      }, 1000);
-
-    } catch (error) {
-      console.error("[Auth] Registration error:", error);
-
-      showStatus(
-        elements.regStatus,
-        "An unexpected error occurred during registration.",
-        "error"
-      );
-
-    } finally {
-      setLoading(elements.regBtn, false);
-    }
+    showStatus(regStatus, `Account created, ${resolvedName}! Deploying you to the frontline…`, 'success');
+    setTimeout(() => window.location.replace(REDIRECT_URL), 900);
   }
 
-  // ==========================================================
-  // RESPONSE VALIDATION
-  // ==========================================================
-
-  function isSuccessful(result) {
-    if (!result || !result.ok) {
-      return false;
-    }
-
-    const data = result.data || {};
-
-    return data.ok === true || data.success === true;
-  }
-
-  function getErrorMessage(result, fallback) {
-    const data = result?.data || {};
-
-    if (data.error) return data.error;
-    if (data.message) return data.message;
-
-    if (result?.status === 409) {
-      return "An account with this email already exists.";
-    }
-
-    if (result?.status === 429) {
-      return "Too many attempts. Please wait before trying again.";
-    }
-
-    if (result?.status === 503) {
-      return "The database is temporarily unavailable. Please try again.";
-    }
-
-    if (result?.status === 0) {
-      return "Cannot reach the authentication server. Check your backend URL and server status.";
-    }
-
-    if (result?.status) {
-      return `${fallback} HTTP ${result.status}.`;
-    }
-
-    return fallback;
-  }
-
-  // ==========================================================
-  // SESSION MANAGEMENT
-  // ==========================================================
-
+  /* ══════════════════════════════════════════════════════════
+     SESSION HELPERS
+  ══════════════════════════════════════════════════════════ */
   function persistSession(token, user) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(LEGACY_TOKEN_KEY, token);
-
-    localStorage.setItem(
-      USER_KEY,
-      JSON.stringify(user)
-    );
+    localStorage.setItem(TOKEN_KEY,      token || '');
+    localStorage.setItem('gw_id_token',  token || '');   // auth-guard alias
+    localStorage.setItem(USER_KEY,       JSON.stringify(user));
+    localStorage.setItem('gw_last_login_at', String(Date.now()));
   }
 
   function clearSession() {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem('gw_id_token');
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('gw_last_login_at');
   }
 
-  async function verifyToken(token) {
-    const result = await apiPost(
-      "/api/auth/verify",
-      { token }
-    );
-
-    if (!isSuccessful(result)) {
-      return false;
+  async function verifyTokenQuiet(token) {
+    const res = await Net.verify(token);
+    if (res && res.ok) {
+      // Refresh stored user so commanderName is always up-to-date
+      const stored = JSON.parse(localStorage.getItem(USER_KEY) || '{}');
+      if (res.commanderName) stored.commanderName = res.commanderName;
+      if (res.username)      stored.commanderName = stored.commanderName || res.username;
+      localStorage.setItem(USER_KEY, JSON.stringify(stored));
     }
-
-    const data = result.data;
-
-    try {
-      const user = JSON.parse(
-        localStorage.getItem(USER_KEY) || "{}"
-      );
-
-      if (data.commanderName) {
-        user.commanderName = data.commanderName;
-      }
-
-      if (data.email) {
-        user.email = data.email;
-      }
-
-      localStorage.setItem(
-        USER_KEY,
-        JSON.stringify(user)
-      );
-
-    } catch (error) {
-      console.error("[Auth] Could not refresh session user:", error);
-    }
-
-    return true;
+    return !!(res && res.ok);
   }
 
-  // ==========================================================
-  // UI HELPERS
-  // ==========================================================
-
-  function isValidEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  /* ══════════════════════════════════════════════════════════
+     PASSWORD STRENGTH INDICATOR
+  ══════════════════════════════════════════════════════════ */
+  function updateStrength(pw) {
+    if (!regStrengthBar) return;
+    let score = 0;
+    if (pw.length >= 12)           score++;
+    if (pw.length >= 16)           score++;
+    if (/[A-Z]/.test(pw))          score++;
+    if (/[0-9]/.test(pw))          score++;
+    if (/[^A-Za-z0-9]/.test(pw))   score++;
+    const colors = ['#ef4444', '#f97316', '#eab308', '#22d3ee', '#4ade80'];
+    regStrengthBar.style.width      = `${(score / 5) * 100}%`;
+    regStrengthBar.style.background = colors[Math.max(0, score - 1)] || '#ef4444';
   }
 
-  function setLoading(button, loading, label) {
-    if (!button) return;
-
-    if (loading) {
-      button.dataset.originalText = button.textContent.trim();
-    }
-
-    button.disabled = loading;
-    button.classList.toggle("loading", loading);
-
-    if (loading && label) {
-      button.textContent = label;
-    } else if (!loading && button.dataset.originalText) {
-      button.textContent = button.dataset.originalText;
-    }
+  /* ══════════════════════════════════════════════════════════
+     UI HELPERS
+  ══════════════════════════════════════════════════════════ */
+  function setLoading(btn, loading) {
+    if (!btn) return;
+    btn.disabled = loading;
+    btn.classList.toggle('loading', loading);
   }
 
-  function showStatus(element, message, type = "error") {
-    if (!element) return;
-
-    element.textContent = message;
-    element.className = `auth-status visible ${type}`;
+  function showStatus(el, msg, type) {
+    if (!el) return;
+    el.textContent = msg;
+    el.className   = 'auth-status visible ' + (type || 'error');
   }
 
-  function clearStatus(element) {
-    if (!element) return;
-
-    element.textContent = "";
-    element.className = "auth-status";
+  function clearStatus(el) {
+    if (!el) return;
+    el.textContent = '';
+    el.className   = 'auth-status';
   }
 
 })();

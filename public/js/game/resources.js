@@ -43,28 +43,37 @@ GW.PlasmaOrb = class PlasmaOrb {
     // Outer glow ring
     this.gfxOuter = this.scene.add.graphics();
     this.gfxOuter.setDepth(8);
-    this.gfxOuter.fillStyle(0xa78bfa, 0.2);
-    this.gfxOuter.fillCircle(0, 0, 18);
+    this.gfxOuter.fillStyle(0x22d3ee, 0.24);
+    this.gfxOuter.fillCircle(0, 0, 34);
+    this.gfxOuter.lineStyle(2, 0xe0f2fe, 0.9);
+    this.gfxOuter.strokeCircle(0, 0, 25);
     this.gfxOuter.x = this.x;
     this.gfxOuter.y = this.y;
 
     // Core orb
     this.gfxCore = this.scene.add.graphics();
-    this.gfxCore.setDepth(9);
-    this.gfxCore.fillStyle(0x7c3aed, 1);
-    this.gfxCore.fillCircle(0, 0, 10);
-    this.gfxCore.fillStyle(0xc4b5fd, 0.9);
-    this.gfxCore.fillCircle(-3, -3, 4);  // highlight
+    this.gfxCore.setDepth(10);
+    this.gfxCore.fillStyle(0x2563eb, 1);
+    this.gfxCore.fillCircle(0, 0, 18);
+    this.gfxCore.fillStyle(0x22d3ee, 1);
+    this.gfxCore.fillCircle(0, 0, 12);
+    this.gfxCore.fillStyle(0xe0f2fe, 0.98);
+    this.gfxCore.fillCircle(-4, -5, 6);
+    this.gfxCore.fillStyle(0xffffff, 0.85);
+    this.gfxCore.fillCircle(3, 3, 3);
     this.gfxCore.x = this.x;
     this.gfxCore.y = this.y;
 
     // Value label
-    this.label = this.scene.add.text(this.x, this.y - 16, `+${this.value}`, {
+    this.label = this.scene.add.text(this.x, this.y - 35, `+${this.value} PLASMA`, {
       fontFamily: 'Exo 2, sans-serif',
-      fontSize:   '9px',
+      fontSize:   '12px',
       fontStyle:  'bold',
-      color:      '#c4b5fd',
-    }).setOrigin(0.5, 1).setDepth(9);
+      color:      '#f0fdff',
+      stroke:     '#082f49',
+      strokeThickness: 4,
+      shadow:     { color: '#22d3ee', blur: 10, fill: true },
+    }).setOrigin(0.5, 1).setDepth(11);
 
     // Idle float animation
     this.scene.tweens.add({
@@ -89,8 +98,8 @@ GW.PlasmaOrb = class PlasmaOrb {
     });
 
     // Hit area — interactive zone
-    this.hitZone = this.scene.add.circle(this.x, this.y, 20, 0x000000, 0)
-      .setDepth(9)
+    this.hitZone = this.scene.add.circle(this.x, this.y, 36, 0x000000, 0)
+      .setDepth(12)
       .setInteractive({ useHandCursor: true });
 
     this.hitZone.on('pointerdown', () => this._collect());
@@ -122,24 +131,41 @@ GW.PlasmaOrb = class PlasmaOrb {
   _collect() {
     if (!this.active) return;
     this.active = false;
+    if (window.GWAudio) window.GWAudio.play('plasma-collect');
 
     // Cancel timers
     if (this._warnTimer)  this._warnTimer.remove(false);
     if (this._expireTimer) this._expireTimer.remove(false);
 
-    // Collect pop animation
+    // ── v1.0.1: fly toward plasma collector box (top-left HUD, centre ≈ x=62, y=30) ──
+    // BOX_X=8, BOX_W=108 → centre x = 8 + 108/2 = 62. TH=60 → centre y = 30.
+    const targetX = 62;
+    const targetY = 30;
+
+    // Quick scale-up pop first, then travel to the collector
     this.scene.tweens.add({
       targets:  [this.gfxOuter, this.gfxCore, this.label],
-      y:        `-=30`,
-      alpha:    0,
-      scaleX:   1.5,
-      scaleY:   1.5,
-      duration: 280,
+      scaleX:   1.4,
+      scaleY:   1.4,
+      duration: 100,
       ease:     'Power2',
-      onComplete: () => this._destroyObjects(),
+      onComplete: () => {
+        this.scene.tweens.add({
+          targets:  [this.gfxOuter, this.gfxCore, this.label],
+          x:        targetX,
+          y:        targetY,
+          scaleX:   0.3,
+          scaleY:   0.3,
+          alpha:    0,
+          duration: 380,
+          ease:     'Power2',
+          onComplete: () => {
+            this._destroyObjects();
+            if (this.onCollect) this.onCollect(this.value);
+          },
+        });
+      },
     });
-
-    if (this.onCollect) this.onCollect(this.value);
   }
 
   _expire() {
@@ -211,12 +237,11 @@ GW.ResourceManager = class ResourceManager {
   }
 
   _scheduleNextOrb() {
-    const min   = GW.RESOURCES.ORB_SPAWN_INTERVAL_MIN || 10000;
-    const max   = GW.RESOURCES.ORB_SPAWN_INTERVAL_MAX || 15000;
-    const delay = min + Math.floor(Math.random() * (max - min + 1));
+    // v1.0.1: random plasma spawns every exactly 20 s (ORB_SPAWN_INTERVAL = 20000)
+    const delay = GW.RESOURCES.ORB_SPAWN_INTERVAL || 20000;
     this._orbTimer = this.scene.time.delayedCall(delay, () => {
       this._spawnOrb();
-      this._scheduleNextOrb(); // chain — schedules the next one
+      this._scheduleNextOrb();
     });
   }
 

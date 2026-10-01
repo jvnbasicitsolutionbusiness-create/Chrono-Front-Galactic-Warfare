@@ -25,6 +25,8 @@ GW.BootScene = class BootScene extends Phaser.Scene {
   preload() {
     const fill   = document.getElementById('loadBarFill');
     const status = document.getElementById('loadStatus');
+    const burstPath = GW.ASSETS && GW.ASSETS.EFFECTS && GW.ASSETS.EFFECTS.deathBurst;
+    if (burstPath) this.load.svg('gw-death-burst', burstPath, { width: 40, height: 40 });
     this.load.on('progress', v => { if (fill) fill.style.width = Math.round(v * 100) + '%'; });
     this.load.on('complete', () => { if (fill) fill.style.width = '100%'; if (status) status.textContent = 'Ready!'; });
   }
@@ -33,6 +35,7 @@ GW.BootScene = class BootScene extends Phaser.Scene {
     // ── Bootstrap game systems SYNCHRONOUSLY first ─────────
     if (!GW.progression) GW.progression = new GW.ProgressionManager();
     if (!GW.cardManager) GW.cardManager  = new GW.CardManager(GW.progression);
+    if (window.GWGraphics) window.GWGraphics.apply();
 
     // Firebase init: fire-and-forget, do not block scene transition
     if (GW.firebaseClient) GW.firebaseClient.init().catch(() => {});
@@ -68,9 +71,9 @@ GW.BootScene = class BootScene extends Phaser.Scene {
       if (loadScreen) {
         loadScreen.classList.add('fade-out');
         // Remove from DOM after CSS transition (0.6s)
-        this.time.delayedCall(650, () => {
+        window.setTimeout(() => {
           loadScreen.classList.add('gone');
-        });
+        }, 650);
       }
     });
 
@@ -89,6 +92,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
   init(data) {
     this.levelId         = (data && data.levelId) ? data.levelId : 1;
+    if (window.GW && GW.progression && GW.progression.isGuest && this.levelId > 10) this.levelId = 10;
     this._gameOver       = false;
     this._gameWon        = false;
     this._selectedCharId = null;
@@ -103,6 +107,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
     const levelData = GW.LEVELS[this.levelId] || GW.LEVELS[1];
     const envId     = levelData.environment || 'daytime';
+    if (window.GWAudio) window.GWAudio.setScene('battle', envId);
     const env       = GW.ENVIRONMENTS[envId] || GW.ENVIRONMENTS.daytime;
 
     // ── Loadout: only claimed cards, max 6 ─────────────────
@@ -162,13 +167,14 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     // ── Wire game callbacks ────────────────────────────────
     this._wireCallbacks(levelData);
     this._setupInput(W, H);
+    const restoredBattle = this._restoreBattleSnapshot();
 
     // ── Start resource regen immediately; waves wait for Deploy ──
     // Wave manager is NOT started here — it starts only after the player
     // clicks the DEPLOY button in the briefing overlay. This ensures the
     // 20-second preparation countdown doesn't begin until the player is ready.
     this.resourceManager.startRegen();
-    this._wavesStarted = false;
+    this._wavesStarted = !!(restoredBattle && this.waveManager.started);
     if (this.uiManager.energyText) this.uiManager.energyText.setText(String(this.resourceManager.energy));
 
     // ── Animated environment (continuous) ──────────────────
@@ -180,7 +186,8 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     // ── Intro recon + briefing overlay ──────────────────────
     // _playRecon() plays the cinematic intro (daytime L1-5 only), then
     // shows the mission briefing. Waves don't start until Deploy is clicked.
-    this._playRecon(W, H, envId, this.levelId);
+    if (restoredBattle && this._wavesStarted) this.uiManager._openPauseMenu();
+    else this._playRecon(W, H, envId, this.levelId);
     } catch (err) {
       console.error('[GW] GameScene.create() FAILED:', err);
       // Emergency fallback: draw a minimal battlefield so the player isn't stuck
@@ -351,9 +358,11 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       );
     }
 
-    // Start the wave manager — its INITIAL_DELAY (20 000 ms) is the
-    // actual gap before the first alien spawns, matching the banner message.
-    this.waveManager.start();
+    // Let the banner fade completely, then start the full 20-second prep clock.
+    this.time.delayedCall(3000, () => {
+      if (this._gameOver || this._gameWon) return;
+      this.waveManager.start();
+    });
   }
 
   // ══════════════════════════════════════════════════════════
@@ -414,11 +423,15 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       moon.fillStyle(0xfef9c3, 0.95); moon.fillCircle(W - 80, 38, 24);
       moon.fillStyle(0x020810, 1); moon.fillCircle(W - 67, 32, 18);
     } else if (env.id === 'foggy') {
-      bg.fillGradientStyle(0x7a8fa0, 0x7a8fa0, 0xb8cad4, 0xb8cad4, 1);
+      bg.fillGradientStyle(0x4b8190, 0x4b8190, 0x9bcbd0, 0x9bcbd0, 1);
       bg.fillRect(0, 0, W, TOP);
-      const fog = this.add.graphics().setDepth(2);
-      fog.fillStyle(0xd4dde4, 0.55); fog.fillRect(0, TOP - 55, W, 65);
-      fog.fillStyle(0xe8edf0, 0.4);  fog.fillRect(0, TOP - 28, W, 38);
+      const flood = this.add.graphics().setDepth(2);
+      flood.fillStyle(0x164e63, 0.35); flood.fillRect(0, TOP - 14, W, 18);
+      flood.lineStyle(2, 0xa5f3fc, 0.42);
+      for (let ripple = 0; ripple < 10; ripple++) {
+        const y = TOP - 10 + ripple * 12;
+        flood.beginPath(); flood.moveTo(0, y); flood.lineTo(W, y + (ripple % 2 ? 2 : -2)); flood.strokePath();
+      }
     } else if (env.id === 'rainy_stormy') {
       bg.fillGradientStyle(0x0b1824, 0x0b1824, 0x162338, 0x162338, 1);
       bg.fillRect(0, 0, W, TOP);
@@ -454,7 +467,14 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   }
 
   _startEnvironmentAnimation(W, H, env) {
-    if (env.id !== 'daytime') return;
+    this._environmentId = env.id;
+    if (env.id !== 'daytime') {
+      this._ambientParticles = [];
+      this._ambientElapsed = 0;
+      this._ambientDelay = env.id === 'rainy_stormy' ? 45 : env.id === 'foggy' ? 260 : 420;
+      this._lightningTimer = 4500 + Math.random() * 4500;
+      return;
+    }
 
     const TOP = GW.BOARD.TOP_OFFSET;
 
@@ -494,7 +514,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   }
 
   _updateEnvironmentAnimation(delta) {
-    if (!this._cloudGraphics) return;
+    if (!this._cloudGraphics) {
+      this._updateEnvironmentSprites(delta);
+      return;
+    }
 
     const W   = GW.DISPLAY.BASE_WIDTH;
     const TOP = GW.BOARD.TOP_OFFSET;
@@ -524,6 +547,73 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       this._nextWind  = 6000 + Math.random() * 4000;
       this._spawnWindEffect();
     }
+  }
+
+  _updateEnvironmentSprites(delta) {
+    if (!this._ambientParticles || !this._environmentId) return;
+    const W = GW.DISPLAY.BASE_WIDTH;
+    const H = GW.BOARD.TOP_OFFSET + GW.BOARD.LANES * GW.BOARD.LANE_HEIGHT;
+    const kind = this._environmentId;
+    const limit = kind === 'foggy' ? 18 : kind === 'rainy_stormy' ? 36 : 14;
+    this._ambientElapsed += delta;
+
+    if (kind === 'rainy_stormy') {
+      this._lightningTimer -= delta;
+      if (this._lightningTimer <= 0) {
+        this.cameras.main.flash(120, 185, 215, 238);
+        this._lightningTimer = 6000 + Math.random() * 7000;
+      }
+    }
+
+    if (this._ambientElapsed >= this._ambientDelay && this._ambientParticles.length < limit) {
+      this._ambientElapsed = 0;
+      const g = this.add.graphics().setDepth(7);
+      const particle = { g, age: 0, x: Math.random() * W, y: Math.random() * H };
+
+      if (kind === 'nighttime') {
+        g.fillStyle(0xa3e635, 0.16); g.fillCircle(0, 0, 8);
+        g.fillStyle(0xd9f99d, 0.95); g.fillRect(-1, -1, 3, 3);
+        particle.vx = 8 + Math.random() * 12; particle.vy = -4;
+      } else if (kind === 'foggy') {
+        g.lineStyle(1, 0x9ce4e3, 0.24);
+        g.strokeEllipse(0, 0, 28 + Math.random() * 18, 5 + Math.random() * 3);
+        g.lineStyle(1, 0xd7ffff, 0.15);
+        g.strokeEllipse(0, 0, 46 + Math.random() * 20, 8);
+        particle.x = Math.random() * W;
+        particle.y = GW.BOARD.TOP_OFFSET + Math.random() * GW.BOARD.LANES * GW.BOARD.LANE_HEIGHT;
+        particle.vx = -9 - Math.random() * 16; particle.vy = 0;
+      } else if (kind === 'rainy_stormy') {
+        g.lineStyle(1, 0xb9d9e8, 0.36);
+        g.beginPath(); g.moveTo(0, 0); g.lineTo(-4, 14); g.strokePath();
+        particle.y = -12; particle.vx = -32; particle.vy = 210 + Math.random() * 120;
+      } else {
+        g.fillStyle(0x86efac, 0.18); g.fillCircle(0, 0, 7);
+        g.fillStyle(0xd9f99d, 0.88); g.fillCircle(0, 0, 2.5);
+        g.lineStyle(1, 0x4ade80, 0.55); g.strokeCircle(0, 0, 4);
+        particle.vx = -5 + Math.random() * 10; particle.vy = -8 - Math.random() * 8;
+      }
+      g.setPosition(particle.x, particle.y);
+      particle.baseY = particle.y;
+      particle.wobble = 5 + Math.random() * 12;
+      this._ambientParticles.push(particle);
+    }
+
+    this._ambientParticles = this._ambientParticles.filter(particle => {
+      particle.age += delta;
+      particle.x += particle.vx * delta / 1000;
+      particle.y += particle.vy * delta / 1000;
+      if (kind !== 'rainy_stormy' && kind !== 'foggy') particle.y = particle.baseY + Math.sin(particle.age / 650) * particle.wobble;
+      particle.g.setPosition(particle.x, particle.y);
+      if (kind === 'nighttime' || kind === 'radioactive') particle.g.setAlpha(0.55 + (Math.sin(particle.age / 180) + 1) * 0.22);
+      if (kind === 'foggy') {
+        const pulse = 0.65 + Math.sin(particle.age / 260) * 0.25;
+        particle.g.setAlpha(pulse);
+        particle.g.setScale(pulse, 1);
+      }
+      const expired = particle.y > H + 24 || particle.x < -240 || particle.x > W + 240 || particle.age > 26000;
+      if (expired) particle.g.destroy();
+      return !expired;
+    });
   }
 
   _spawnWindEffect() {
@@ -888,40 +978,21 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
     this.waveManager.onCountdown = () => {};
     this.waveManager.onAllClear  = () => this._triggerWin();
-
-    // ── onAlienSpawned: the ONLY driver of the alien-head position ──────
-    // Head moves linearly 0 → 0.95 as aliens are spawned, then jumps to 1.0 on win.
-    // This is ALWAYS forward — progress can never decrease.
+    this.waveManager.onHordeWarning = () => {
+      this.uiManager.showBigBanner('⚠  A HUGE HORDE OF ALIENS IS APPROACHING!', 2800);
+    };
     this.waveManager.onAlienSpawned = (spawned, total) => {
-      if (total > 0) {
-        const headProgress = Math.min(0.95, spawned / total);
-        this.uiManager.updateTimelineHead(headProgress);
-      }
+      if (total > 0) this.uiManager.updateTimelineHead(spawned / total);
     };
 
     // ── onFlagAlien: flag-carrier enters — warn the player BEFORE head reaches flag ─
-    this.waveManager.onFlagAlien = () => {
-      // Step 1 (immediate): head moves near-but-not-at the final flag
-      this.uiManager.updateTimelineHead(0.88);
-
-      // Step 2 (immediate): big red warning — word-wrapped, shakes for urgency
-      this.uiManager.showBigBanner(
-        '⚠  A HUGE WAVE OF ALIENS IS APPROACHING!',
-        2200
-      );
-
-      // Step 3 (after 2.2s): head hits the flag; second banner confirms horde arrival
-      this.time.delayedCall(2200, () => {
-        this.uiManager.updateTimelineHead(1.0);
-        this.uiManager.showBanner(
-          'HOLD THE LINE — THE HORDE IS HERE!',
-          GW.UI_COLORS.TEXT_DANGER,
-          2000
-        );
-      });
+    this.waveManager.onFlagAlien = waveDef => {
+      if (waveDef && waveDef.isHorde) return;
+      this.uiManager.showBigBanner('⚠  FLAG HOLDER DETECTED!', 2200);
     };
 
     this.combatManager.onEnemyKilled = en => {
+      if (window.GWAudio) window.GWAudio.play('alien-death');
       this.uiManager.updateScore(this.playerState.score);
       if (GW.progression) GW.progression.discoverEnemy(en.id);
       // Track last kill position for the card-pop animation in _triggerWin
@@ -932,6 +1003,9 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     };
     this.combatManager.onEnemyReachedHome = () => {
       if (!this._gameOver && !this._gameWon) this._triggerLose();
+    };
+    this.combatManager.onCharacterKilled = () => {
+      if (window.GWAudio) window.GWAudio.play('defender-death');
     };
   }
 
@@ -1001,6 +1075,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
     this.combatManager.addCharacter(character);
     this.resourceManager.spend(def.cost);
+    if (window.GWAudio) window.GWAudio.play('card-place');
     // Start per-card cooldown if configured (e.g. fire_lance_gunner = 7.5s)
     this.uiManager.startCooldown(this._selectedCharId);
     this._feedback(pos.x, pos.y, true, def.name + ' deployed');
@@ -1023,6 +1098,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════
   _triggerWin() {
     if (this._gameOver || this._gameWon) return;
+    this._clearBattleSnapshot();
     this._gameWon = true;
     this.resourceManager.stopRegen();
 
@@ -1154,7 +1230,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
         );
       };
 
-      btnZone.on('pointerdown', claimAndProceed);
+      btnZone.on('pointerdown', () => {
+        if (window.GWAudio) window.GWAudio.play('victory-claim');
+        claimAndProceed();
+      });
 
       // Countdown label
       const countdown = this.add.text(targetX, btnY + BH + 10, 'Auto-claiming in 10…', {
@@ -1190,6 +1269,8 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
   /** Navigate to next level — saves state and starts next level directly. */
   _goToNextLevel(nextLevelId) {
+    window.__GW_ALLOW_NAVIGATION__ = true;
+    this._clearBattleSnapshot();
     // Unlock the next level in progression state
     if (GW.progression && GW.LEVELS[nextLevelId]) {
       if (!GW.progression.isLevelUnlocked(nextLevelId)) {
@@ -1203,11 +1284,12 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this.sentinelMgr.destroyAll();
     if (this.currencyManager) this.currencyManager.destroyAll();
     // Navigate — use BootScene transition to properly init the next level
-    window.location.href = "game.html?level=" + nextLevelId;
+    window.location.replace("game.html?level=" + nextLevelId);
   }
 
   _triggerLose() {
     if (this._gameOver || this._gameWon) return;
+    this._clearBattleSnapshot();
     this._gameOver = true;
     this.resourceManager.stopRegen();
     this.cameras.main.shake(380, 0.012);
@@ -1218,17 +1300,192 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   }
 
   _restart() {
+    window.__GW_ALLOW_NAVIGATION__ = true;
+    this._clearBattleSnapshot();
     this.combatManager.destroyAll();
     this.sentinelMgr.destroyAll();
     if (this.currencyManager) this.currencyManager.destroyAll();
-    this.scene.restart({ levelId: this.levelId });
+    window.location.replace('game.html?level=' + this.levelId);
   }
 
   _goToMenu() {
-    this.combatManager.destroyAll();
-    this.sentinelMgr.destroyAll();
-    if (this.currencyManager) this.currencyManager.destroyAll();
-    window.location.href = 'index.html';
+    this._saveBattleSnapshot();
+    window.__GW_ALLOW_NAVIGATION__ = true;
+    sessionStorage.removeItem('gw_menu_return');
+    window.location.replace('index.html');
+  }
+
+  async _saveBattleSnapshot(force) {
+    const progression = GW.progression;
+    const token = localStorage.getItem('gw_session_token') || localStorage.getItem('gw_id_token');
+    if (!progression || progression.isGuest || !token || this._gameOver || this._gameWon || !this.combatManager) return false;
+    if (this._battleSnapshotSaved && !force) return this._battleSnapshotSavePromise || true;
+
+    const snapshot = {
+      levelId: this.levelId,
+      energy: this.resourceManager.energy,
+      score: this.playerState.score,
+      enemiesDefeated: this.playerState.enemiesDefeated,
+      timelineProgress: this.uiManager._currentProgress || 0,
+      wave: {
+        started: this.waveManager.started,
+        currentWaveIndex: this.waveManager.currentWaveIndex,
+        state: this.waveManager.state,
+        initialTimer: this.waveManager.initialTimer,
+        betweenTimer: this.waveManager.betweenTimer,
+        totalSpawned: this.waveManager._totalSpawnedAllWaves,
+        totalScheduled: this.waveManager._totalScheduledAllWaves,
+        spawnedCount: this.waveManager._spawnedCount,
+        spawnedEntryIndexes: this.waveManager._spawnedEntryIndexes,
+        chainIndex: this.waveManager._chainIndex,
+        hordeReleaseScheduled: this.waveManager._hordeReleaseScheduled,
+        hordeReleaseRemaining: this.waveManager._hordeReleaseTimer && this.waveManager._hordeReleaseTimer.getRemaining
+          ? this.waveManager._hordeReleaseTimer.getRemaining() : 0,
+      },
+      characters: this.combatManager.characters.map(character => ({
+        id: character.id,
+        lane: character.lane,
+        cellIndex: character.cellIndex,
+        hp: character.hp,
+        genTimer: character.genTimer,
+        attackTimer: character.attackTimer,
+      })),
+      enemies: this.combatManager.enemies.map(enemy => ({
+        id: enemy.id,
+        lane: enemy.lane,
+        x: enemy.x,
+        y: enemy.y,
+        hp: enemy.hp,
+        speed: enemy.speed,
+        equipmentId: enemy.equipment && enemy.equipment.id,
+      })),
+      projectiles: this.projectileManager.projectiles.map(projectile => ({
+        kind: projectile instanceof GW.FireProjectile ? 'fire' : 'normal',
+        x: projectile.x,
+        y: projectile.y,
+        damage: projectile.damage,
+        speed: projectile.speed,
+        color: projectile.color,
+        size: projectile.size,
+        age: projectile._age || 0,
+        targetIndex: this.combatManager.enemies.indexOf(projectile.target),
+      })),
+      plasmaOrbs: this.resourceManager.orbs.map(orb => ({
+        x: orb.x, y: orb.y, value: orb.value,
+        lifetime: orb._expireTimer && orb._expireTimer.getRemaining ? orb._expireTimer.getRemaining() : orb.lifetime,
+      })),
+      currencyDrops: this.currencyManager.drops.map(drop => ({
+        x: drop.x, y: drop.y, typeId: drop.typeDef.id,
+        lifetime: drop._expireTimer && drop._expireTimer.getRemaining ? drop._expireTimer.getRemaining() : GW.CURRENCY.LIFETIME,
+      })),
+      savedAt: Date.now(),
+    };
+    progression.state.activeBattle = snapshot;
+    try {
+      localStorage.setItem('gw_battle_snapshot', JSON.stringify(snapshot));
+      localStorage.setItem('gwr_progression_v2', JSON.stringify(progression.state));
+    } catch (error) {
+      console.warn('[Game] Local checkpoint could not be written.', error);
+    }
+    this._battleSnapshotSaved = true;
+    this._battleSnapshotSavePromise = (async () => {
+      const client = GW.sheetsClient;
+      if (!client) return true;
+      if (!client.ready && client.init) {
+        await Promise.race([
+          client.init().catch(() => {}),
+          new Promise(resolve => window.setTimeout(resolve, 1500)),
+        ]);
+      }
+      if (!client.ready) return true;
+      let user = {};
+      try { user = JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) {}
+      return client.saveProgression(user.email || progression.state.playerName, progression.state);
+    })().catch(error => {
+      console.warn('[Game] Cloud checkpoint failed; local checkpoint remains available.', error);
+      return false;
+    });
+    return this._battleSnapshotSavePromise;
+  }
+
+  _restoreBattleSnapshot() {
+    const progression = GW.progression;
+    const snapshot = progression && progression.state.activeBattle;
+    if (!snapshot || snapshot.levelId !== this.levelId || progression.isGuest) return false;
+
+    this.resourceManager.energy = snapshot.energy;
+    this.playerState.score = snapshot.score || 0;
+    this.playerState.enemiesDefeated = snapshot.enemiesDefeated || 0;
+    (snapshot.characters || []).forEach(saved => {
+      const pos = GW.Collision.cellToWorld(saved.lane, saved.cellIndex);
+      const character = GW.CharacterFactory.create(this, saved.id, saved.lane, saved.cellIndex, pos.x, pos.y);
+      character.hp = saved.hp;
+      character.genTimer = saved.genTimer;
+      character.attackTimer = saved.attackTimer;
+      character._updateHpBar();
+      if (character.isSupport && character.role === 'energy') {
+        character.onGenerateEnergy = (_amount, x, y) => this.resourceManager.spawnGeneratorOrb(x || character.x, y || character.y);
+      }
+      this.combatManager.addCharacter(character);
+    });
+    const restoredEnemies = [];
+    (snapshot.enemies || []).forEach(saved => {
+      const enemy = GW.EnemyFactory.create(this, saved.id, saved.lane);
+      if (!enemy) return;
+      enemy.x = saved.x;
+      enemy.y = saved.y;
+      enemy.speed = saved.speed;
+      enemy.hp = saved.hp;
+      enemy.container.setPosition(saved.x, saved.y);
+      if (saved.equipmentId && GW.ALIEN_EQUIPMENT && GW.ALIEN_EQUIPMENT[saved.equipmentId]) {
+        enemy.applyEquipment(GW.ALIEN_EQUIPMENT[saved.equipmentId]);
+      }
+      enemy._updateHpBar();
+      this.combatManager.addEnemy(enemy);
+      restoredEnemies.push(enemy);
+    });
+    (snapshot.projectiles || []).forEach(saved => {
+      const target = restoredEnemies[saved.targetIndex];
+      if (!target) return;
+      const projectile = this.projectileManager.fire(
+        saved.x, saved.y, target, saved.damage, saved.color, saved.size,
+        saved.kind === 'fire' ? 'fire' : undefined
+      );
+      projectile.speed = saved.speed;
+      if (saved.kind === 'fire') {
+        projectile._age = saved.age || 0;
+        projectile._drawFlame(projectile._age);
+      }
+    });
+    (snapshot.plasmaOrbs || []).forEach(saved => {
+      const orb = new GW.PlasmaOrb(this, saved.x, saved.y, saved.value, saved.lifetime, value => {
+        this.resourceManager.earn(value);
+        const index = this.resourceManager.orbs.indexOf(orb);
+        if (index !== -1) this.resourceManager.orbs.splice(index, 1);
+      });
+      this.resourceManager.orbs.push(orb);
+    });
+    (snapshot.currencyDrops || []).forEach(saved => {
+      const type = GW.CURRENCY.TYPES[saved.typeId];
+      if (type) this.currencyManager.spawnDrop(saved.x, saved.y, type, saved.lifetime);
+    });
+
+    const savedWave = snapshot.wave || {};
+    this.waveManager.restoreSnapshot(savedWave);
+    this._wavesStarted = this.waveManager.started;
+    if (this.uiManager.energyText) this.uiManager.energyText.setText(String(this.resourceManager.energy));
+    this.uiManager.updateScore(this.playerState.score);
+    this.uiManager.updateTimelineHead(snapshot.timelineProgress || 0);
+    return true;
+  }
+
+  _clearBattleSnapshot() {
+    this._battleSnapshotSaved = false;
+    try { localStorage.removeItem('gw_battle_snapshot'); } catch (_) {}
+    if (GW.progression && GW.progression.state) {
+      GW.progression.state.activeBattle = null;
+      GW.progression.save();
+    }
   }
 
   // ══════════════════════════════════════════════════════════

@@ -6,6 +6,19 @@
  */
 
 /* global GW */
+function getAlienAttackCue(enemy) {
+  const definition = enemy && enemy.def ? enemy.def : {};
+  if (definition.attackSound) return definition.attackSound;
+  const attackType = String(
+    definition.attackType || definition.weaponType || definition.projectileType || 'melee'
+  ).toLowerCase();
+  if (attackType.includes('laser')) return 'alien-laser';
+  if (attackType.includes('fire') || attackType.includes('flame')) return 'alien-fire';
+  if (attackType.includes('plasma')) return 'alien-plasma';
+  if (attackType.includes('bullet') || attackType.includes('gun')) return 'alien-bullet';
+  return 'alien-melee';
+}
+
 GW.CombatManager = class CombatManager {
   constructor(scene, projectileManager, resourceManager, playerState) {
     this.scene             = scene;
@@ -36,13 +49,38 @@ GW.CombatManager = class CombatManager {
       if (!ch.alive) continue;
       const result = ch.update(delta, this.enemies);
       if (result && result.shoot && result.target) {
+        // Determine projectile type from weapon definition
+        const wpnDef = (ch.def && ch.def.weapon && GW.WEAPONS)
+          ? GW.WEAPONS[ch.def.weapon] : null;
+        const projType = (wpnDef && wpnDef.projectileType) || null;
+        const isFireLance = wpnDef && wpnDef.id === 'fire_lance';
+        const weaponCue = isFireLance
+          ? 'fire-lance-shot'
+          : wpnDef && wpnDef.id
+            ? 'weapon-' + wpnDef.id.replace(/_/g, '-')
+          : 'military-melee';
+        if (window.GWAudio) window.GWAudio.play(weaponCue);
+        if (isFireLance && this.scene.textures.exists('gw-death-burst')) {
+          const muzzleFlash = this.scene.add.image(ch.x + 32, ch.y - 8, 'gw-death-burst')
+            .setDepth(22).setTint(0xffb347).setAlpha(0.2).setScale(0.35);
+          this.scene.tweens.add({
+            targets: muzzleFlash,
+            alpha: 0.95,
+            scale: 0.85,
+            duration: 65,
+            yoyo: true,
+            onComplete: () => muzzleFlash.destroy(),
+          });
+        }
+
         this.projectileManager.fire(
           ch.x + 32,
           ch.y - 8,
           result.target,
           ch.damage,
           ch.projColor,
-          ch.projSize
+          ch.projSize,
+          projType          // 'fire' → GW.FireProjectile; others → default
         );
         this._pulseAttacker(ch);
       }
@@ -62,6 +100,7 @@ GW.CombatManager = class CombatManager {
 
       const result = en.update(delta, this.characters);
       if (result && result.attack && result.target) {
+        if (window.GWAudio) window.GWAudio.play(getAlienAttackCue(en));
         result.target.takeDamage(en.damage);
         this._showAttackLine(en, result.target);
       }
