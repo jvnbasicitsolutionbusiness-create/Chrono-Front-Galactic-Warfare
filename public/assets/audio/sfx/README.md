@@ -1,17 +1,5 @@
-﻿# Sound Effects
+﻿# Original Sound Effects
 
-Place gameplay sound effect files here.
+This folder contains individual, original WAV cues for interface buttons, level selectors, and gameplay actions. Each interface control has its own named file; gameplay cues include card selection/placement, coin and plasma collection, deployment, pause/end-screen choices, and separate alien/defender deaths. Military weapons have distinct launch cues; Fire-Lancer uses `fire-lance-shot.wav`, with a separate `fire-lance-windup.wav` and `fire-impact.wav`. Alien melee/bullet/laser/fire/plasma attacks also have separate cues.
 
-Required files:
-- fire-lance-shoot.ogg
-- plasma-shoot.ogg
-- bullet-shoot.ogg
-- enemy-hit.ogg
-- enemy-death.ogg
-- defender-placed.ogg
-- plasma-collect.ogg
-- wave-start.ogg
-- sentinel-activate.ogg
-- base-hit.ogg
-
-Format: OGG (primary) + MP3 (fallback)
+The cues are generated without samples or third-party recordings. Regenerate them and the background tracks from the project root with `node tools/generate-original-music.js`.
