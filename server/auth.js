@@ -41,10 +41,10 @@ const crypto  = require('crypto');
 
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
-function makeToken(email, commanderName) {
+function makeToken(email, commanderName, deviceId) {
   const secret  = process.env.APP_SECRET || 'dev_secret_change_me';
   const expiry  = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30; // 30 days
-  const payload = Buffer.from(`${email}:${commanderName}:${expiry}`).toString('base64url');
+  const payload = Buffer.from(`${email}:${commanderName}:${deviceId || ''}:${expiry}`).toString('base64url');
   const sig     = crypto.createHmac('sha256', secret).update(payload).digest('hex');
   return `${payload}.${sig}`;
 }
@@ -63,15 +63,24 @@ function verifyToken(token) {
     const decoded = Buffer.from(payload, 'base64url').toString('utf8');
     // Format: email:commanderName:expiry
     // email may contain ':', so split from the RIGHT
-    const lastColon   = decoded.lastIndexOf(':');
-    const secondColon = decoded.lastIndexOf(':', lastColon - 1);
-    if (secondColon < 0) return null;
-    const email         = decoded.slice(0, secondColon);
-    const commanderName = decoded.slice(secondColon + 1, lastColon);
-    const expiry        = parseInt(decoded.slice(lastColon + 1), 10);
+    const lastColon = decoded.lastIndexOf(':');
+    const expiry = parseInt(decoded.slice(lastColon + 1), 10);
+    const deviceColon = decoded.lastIndexOf(':', lastColon - 1);
+    const nameColon = decoded.lastIndexOf(':', deviceColon - 1);
+    let email, commanderName, deviceId = '';
+    if (nameColon >= 0 && deviceColon >= 0) {
+      email = decoded.slice(0, nameColon);
+      commanderName = decoded.slice(nameColon + 1, deviceColon);
+      deviceId = decoded.slice(deviceColon + 1, lastColon);
+    } else {
+      const secondColon = decoded.lastIndexOf(':', lastColon - 1);
+      if (secondColon < 0) return null;
+      email = decoded.slice(0, secondColon);
+      commanderName = decoded.slice(secondColon + 1, lastColon);
+    }
     if (!email || !commanderName || isNaN(expiry)) return null;
     if (expiry < Math.floor(Date.now() / 1000)) return null;
-    return { email, commanderName, expiry };
+    return { email, commanderName, deviceId, expiry };
   } catch {
     return null;
   }
@@ -89,33 +98,40 @@ async function sheetsPost(payload) {
     return null;
   }
 
-  try {
-    const res = await fetch(url, {
-      method:   'POST',
-      headers:  { 'Content-Type': 'application/json' },
-      body:     JSON.stringify(payload),
-      redirect: 'follow',
-      signal:   AbortSignal.timeout(15000),
-    });
-
-    const text = await res.text();
-
-    if (!res.ok) {
-      console.warn('[Auth] Sheets HTTP', res.status, text.slice(0, 120));
-      return null;
-    }
-    if (!text.trim()) return null;
-
+  const maxAttempts = String(payload.action).toLowerCase() === 'login' ? 2 : 1;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      return JSON.parse(text);
-    } catch {
-      console.warn('[Auth] Sheets non-JSON:', text.slice(0, 120));
-      return null;
+      const res = await fetch(url, {
+        method:   'POST',
+        headers:  { 'Content-Type': 'application/json' },
+        body:     JSON.stringify({ ...payload, spreadsheetId: (process.env.GOOGLE_SHEETS_ID || '').trim() }),
+        redirect: 'follow',
+        signal:   AbortSignal.timeout(30000),
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        console.warn('[Auth] Sheets HTTP', res.status, text.slice(0, 120));
+        if (res.status >= 500 && attempt < maxAttempts) continue;
+        return null;
+      }
+      if (!text.trim()) return null;
+
+      try {
+        return JSON.parse(text);
+      } catch {
+        console.warn('[Auth] Sheets non-JSON:', text.slice(0, 120));
+        return null;
+      }
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        console.warn('[Auth] Sheets POST failed:', err.message);
+        return null;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-  } catch (err) {
-    console.warn('[Auth] Sheets POST failed:', err.message);
-    return null;
   }
+  return null;
 }
 
 // ─── Rate limiter (in-memory) ─────────────────────────────────────────────────
@@ -131,13 +147,60 @@ function checkRateLimit(ip, limit, windowMs) {
   return entry.count <= limit;
 }
 
+// ─── Login Failure & Lockout Tracker (5 attempts → 5 minutes locked) ───────────
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_MS = 5 * 60 * 1000; // 5 minutes (300,000 ms)
+const _loginLockouts = new Map();
+
+function getLoginIdentifier(ip, email, deviceId) {
+  return `${deviceId || ip || 'unknown'}:${(email || '').trim().toLowerCase()}`;
+}
+
+function getLockoutStatus(identifier) {
+  const record = _loginLockouts.get(identifier);
+  if (!record) return { locked: false, attempts: 0, remainingMs: 0, remainingSeconds: 0 };
+  const now = Date.now();
+  if (record.lockedUntil && now < record.lockedUntil) {
+    const remainingMs = record.lockedUntil - now;
+    return {
+      locked: true,
+      attempts: record.attempts,
+      remainingMs,
+      remainingSeconds: Math.ceil(remainingMs / 1000),
+      lockedUntil: record.lockedUntil,
+    };
+  }
+  // Lockout expired: reset attempts
+  if (record.lockedUntil && now >= record.lockedUntil) {
+    _loginLockouts.delete(identifier);
+    return { locked: false, attempts: 0, remainingMs: 0, remainingSeconds: 0 };
+  }
+  return { locked: false, attempts: record.attempts || 0, remainingMs: 0, remainingSeconds: 0 };
+}
+
+function recordFailedLogin(identifier) {
+  const now = Date.now();
+  const record = _loginLockouts.get(identifier) || { attempts: 0, firstAttemptAt: now };
+  record.attempts = (record.attempts || 0) + 1;
+  record.lastAttemptAt = now;
+  if (record.attempts >= MAX_LOGIN_ATTEMPTS) {
+    record.lockedUntil = now + LOCKOUT_MS;
+  }
+  _loginLockouts.set(identifier, record);
+  return getLockoutStatus(identifier);
+}
+
+function resetLoginAttempts(identifier) {
+  _loginLockouts.delete(identifier);
+}
+
 // ─── Validators ───────────────────────────────────────────────────────────────
 
 const validEmail = e =>
   typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 
 const validPassword = p =>
-  typeof p === 'string' && p.length >= 8;
+  typeof p === 'string' && p.length >= 12;
 
 const validCommanderName = n =>
   typeof n === 'string' &&
@@ -171,7 +234,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
     if (!validPassword(password)) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+      return res.status(400).json({ error: 'Password must be at least 12 characters.' });
     }
     if (!validCommanderName(commanderName)) {
       return res.status(400).json({ error: 'Commander name must be 3–24 characters (letters, numbers, spaces, _ or -).' });
@@ -183,6 +246,7 @@ router.post('/register', async (req, res) => {
       email:         email.toLowerCase(),
       password,               // Apps Script salts + hashes this
       commanderName,
+      deviceId:      String(req.body?.deviceId || '').slice(0, 128),
     });
 
     // ── Handle Sheets being unreachable ───────────────────────────────────────
@@ -211,7 +275,8 @@ router.post('/register', async (req, res) => {
     }
 
     // ── Success — issue session token ─────────────────────────────────────────
-    const token    = makeToken(email.toLowerCase(), commanderName);
+    const deviceId = String(req.body?.deviceId || '').slice(0, 128);
+    const token    = makeToken(email.toLowerCase(), commanderName, deviceId);
     const progress = result.progress || {
       commanderName,
       modesUnlock:    'Adventure',
@@ -245,12 +310,25 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   try {
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
-    if (!checkRateLimit(ip, 10, 15 * 60 * 1000)) {
-      return res.status(429).json({ error: 'Too many login attempts. Please wait 15 minutes.' });
-    }
-
     const email    = String(req.body?.email    || '').trim();
     const password = String(req.body?.password || '');
+    const deviceId = String(req.body?.deviceId || '').slice(0, 128);
+    const identifier = getLoginIdentifier(ip, email, deviceId);
+
+    // ── Check if locked out (5 attempts reached → 5 minutes locked) ────────
+    const lockStatus = getLockoutStatus(identifier);
+    if (lockStatus.locked) {
+      const minutes = Math.floor(lockStatus.remainingSeconds / 60);
+      const seconds = lockStatus.remainingSeconds % 60;
+      const timeStr = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+      return res.status(429).json({
+        error: `Authentication locked: 5 failed attempts reached. Please wait ${timeStr} before trying again.`,
+        locked: true,
+        attempts: lockStatus.attempts,
+        lockedUntil: lockStatus.lockedUntil,
+        remainingSeconds: lockStatus.remainingSeconds,
+      });
+    }
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
@@ -260,6 +338,7 @@ router.post('/login', async (req, res) => {
       action:   'login',
       email:    email.toLowerCase(),
       password,
+      deviceId,
     });
 
     // ── Sheets unreachable ────────────────────────────────────────────────────
@@ -269,14 +348,46 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // ── Wrong credentials ─────────────────────────────────────────────────────
-    if (result.success !== true) {
-      return res.status(401).json({ error: result.message || 'Incorrect email or password.' });
+    if (result.locked) {
+      const lockedUntil = Number(result.lockedUntil) || Date.now() + LOCKOUT_MS;
+      _loginLockouts.set(identifier, { attempts: MAX_LOGIN_ATTEMPTS, lockedUntil });
+      const remainingSeconds = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 1000));
+      return res.status(429).json({
+        error: 'Authentication locked: 5 failed attempts reached. Unable to sign in for 5 minutes.',
+        locked: true,
+        attempts: MAX_LOGIN_ATTEMPTS,
+        lockedUntil,
+        remainingSeconds,
+      });
     }
 
-    // ── Success ───────────────────────────────────────────────────────────────
+    // ── Wrong credentials ─────────────────────────────────────────────────────
+    if (result.success !== true) {
+      const failStatus = recordFailedLogin(identifier);
+      if (failStatus.locked) {
+        return res.status(429).json({
+          error: 'Authentication locked: 5 failed attempts reached. Unable to sign in for 5 minutes.',
+          locked: true,
+          attempts: failStatus.attempts,
+          lockedUntil: failStatus.lockedUntil,
+          remainingSeconds: failStatus.remainingSeconds,
+        });
+      }
+      const attemptsLeft = MAX_LOGIN_ATTEMPTS - failStatus.attempts;
+      return res.status(401).json({
+        error: `Incorrect email or password. Attempt ${failStatus.attempts} of ${MAX_LOGIN_ATTEMPTS} (${attemptsLeft} attempt${attemptsLeft === 1 ? '' : 's'} remaining).`,
+        locked: false,
+        attempts: failStatus.attempts,
+        attemptsRemaining: attemptsLeft,
+        maxAttempts: MAX_LOGIN_ATTEMPTS,
+      });
+    }
+
+    // ── Success — resets the attempts (after 2, 3, or 5 attempts) ─────────────
+    resetLoginAttempts(identifier);
+
     const commanderName = result.progress?.commanderName || email.split('@')[0];
-    const token         = makeToken(email.toLowerCase(), commanderName);
+    const token         = makeToken(email.toLowerCase(), commanderName, deviceId);
 
     return res.status(200).json({
       ok:   true,
@@ -284,6 +395,8 @@ router.post('/login', async (req, res) => {
       commanderName,
       token,
       progress: result.progress || {},
+      progression: result.progression || null,
+      attemptsReset: true,
     });
 
   } catch (err) {
@@ -295,13 +408,28 @@ router.post('/login', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 //  POST /api/auth/verify
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/verify', (req, res) => {
+router.post('/verify', async (req, res) => {
   try {
     const t = req.body?.token || req.body?.idToken || '';
     if (!t) return res.status(401).json({ error: 'No token provided.' });
 
     const decoded = verifyToken(t);
     if (!decoded) return res.status(401).json({ error: 'Invalid or expired session.' });
+    if (decoded.deviceId && decoded.deviceId !== String(req.body?.deviceId || '')) {
+      return res.status(401).json({ error: 'Session is bound to another device.' });
+    }
+
+    const identifier = getLoginIdentifier(req.ip || req.socket?.remoteAddress || 'unknown', decoded.email, decoded.deviceId);
+    const localLock = getLockoutStatus(identifier);
+    if (localLock.locked) {
+      return res.status(429).json({ locked: true, lockedUntil: localLock.lockedUntil, remainingSeconds: localLock.remainingSeconds });
+    }
+    const storedLock = await sheetsPost({ action: 'checkLoginLock', email: decoded.email, deviceId: decoded.deviceId });
+    if (storedLock && storedLock.locked) {
+      const lockedUntil = Number(storedLock.lockedUntil) || Date.now() + LOCKOUT_MS;
+      _loginLockouts.set(identifier, { attempts: MAX_LOGIN_ATTEMPTS, lockedUntil });
+      return res.status(429).json({ locked: true, lockedUntil, remainingSeconds: Math.max(1, Math.ceil((lockedUntil - Date.now()) / 1000)) });
+    }
 
     return res.status(200).json({
       ok:             true,
@@ -320,6 +448,30 @@ router.post('/verify', (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/logout', (_req, res) => {
   res.status(200).json({ ok: true });
+});
+
+router.post('/progression', async (req, res) => {
+  const decoded = verifyToken(req.body?.token);
+  const state = req.body?.progression;
+  if (!decoded) return res.status(401).json({ error: 'Invalid or expired session.' });
+  if (decoded.deviceId && decoded.deviceId !== String(req.body?.deviceId || '')) {
+    return res.status(401).json({ error: 'Session is bound to another device.' });
+  }
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    return res.status(400).json({ error: 'Invalid progression data.' });
+  }
+
+  const result = await sheetsPost({
+    action: 'saveProgression',
+    uid: decoded.email,
+    commanderName: decoded.commanderName,
+    deviceId: decoded.deviceId,
+    progression_json: JSON.stringify(state),
+    saved_at: new Date().toISOString(),
+  });
+  if (!result) return res.status(503).json({ error: 'Google Sheets is temporarily unavailable.' });
+  if (result.success !== true) return res.status(502).json({ error: result.message || 'Progression could not be saved.' });
+  return res.json({ ok: true });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
