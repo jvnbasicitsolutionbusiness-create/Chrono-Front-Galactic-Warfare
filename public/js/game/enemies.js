@@ -29,6 +29,11 @@ GW.Enemy = class Enemy {
     this.damage   = def.damage;          // base damage; scales at low HP
     this.attackCooldown = def.attackCooldown;
     this.reward   = def.reward;
+    this.isStealth = def.specialAbility === 'stealth' || def.specialAbility === 'cloak';
+    this.revealed = !this.isStealth;
+    this.revealTimer = 0;
+    this.slowMultiplier = 1;
+    this.slowTimer = 0;
 
     // Stick-swing state for vex_drone / stick weapon enemies
     this._stickAngle    = 0;    // current swing angle (radians)
@@ -82,6 +87,7 @@ GW.Enemy = class Enemy {
   _build() {
     this.container = this.scene.add.container(this.x, this.y);
     this.container.setDepth(15);
+    if (this.isStealth) this.container.setAlpha(0.2);
 
     // ── Main enemy graphics — driven by SpriteRegistry ───
     const g = this.scene.add.graphics();
@@ -186,6 +192,14 @@ GW.Enemy = class Enemy {
       g.fillStyle(0xfbbf24, 0.8);
       g.fillRect(-4, -34 + bob, 8, 6);
 
+    } else if (eq.id === 'iron_mask') {
+      g.fillStyle(eq.equipColor, 0.95);
+      g.fillRoundedRect(-13, -24 + bob, 26, 16, 4);
+      g.fillStyle(0x111827, 0.9);
+      g.fillRect(-9, -19 + bob, 5, 3); g.fillRect(4, -19 + bob, 5, 3);
+      g.lineStyle(2, 0x9ca3af, 0.9);
+      g.lineBetween(-6, -12 + bob, 6, -12 + bob);
+
     } else if (eq.id === 'helmet') {
       // Metal helmet — grey military helmet
       g.fillStyle(eq.equipColor, 0.95);
@@ -197,6 +211,36 @@ GW.Enemy = class Enemy {
       g.lineStyle(1, 0x9ca3af, 0.6);
       g.lineBetween(-6, -36 + bob, -6, -26 + bob);
       g.lineBetween(6, -36 + bob, 6, -26 + bob);
+
+    } else if (eq.id === 'wooden_shield') {
+      g.fillStyle(eq.equipColor, 0.95);
+      g.fillRoundedRect(-34, -28 + bob, 20, 42, 5);
+      g.lineStyle(2, 0xfbbf24, 0.9);
+      g.strokeRoundedRect(-34, -28 + bob, 20, 42, 5);
+      g.lineBetween(-30, -8 + bob, -18, -8 + bob);
+
+    } else if (eq.id === 'bicycle') {
+      g.lineStyle(3, eq.equipColor, 0.95);
+      g.strokeCircle(-17, 22 + bob, 10); g.strokeCircle(18, 22 + bob, 10);
+      g.lineBetween(-17, 22 + bob, -4, 7 + bob);
+      g.lineBetween(-4, 7 + bob, 7, 22 + bob);
+      g.lineBetween(7, 22 + bob, -17, 22 + bob);
+      g.lineBetween(-4, 7 + bob, 18, 22 + bob);
+
+    } else if (eq.id === 'newspaper') {
+      g.fillStyle(eq.equipColor, 0.95);
+      g.fillRect(-13, -28 + bob, 26, 38);
+      g.lineStyle(1, 0x6b7280, 0.9);
+      g.lineBetween(-9, -22 + bob, 9, -22 + bob);
+      g.lineBetween(-9, -16 + bob, 9, -16 + bob);
+      g.lineBetween(-9, -10 + bob, 9, -10 + bob);
+
+    } else if (eq.id === 'museum_armor') {
+      g.fillStyle(eq.equipColor, 0.95);
+      g.fillRoundedRect(-19, -38 + bob, 38, 16, 5);
+      g.fillRoundedRect(-22, -14 + bob, 44, 26, 5);
+      g.lineStyle(2, 0xd6d3d1, 0.9);
+      g.lineBetween(0, -36 + bob, 0, 10 + bob);
 
     } else if (eq.id === 'shield') {
       // Stolen shield — renders IN FRONT (higher x, left side of alien)
@@ -245,6 +289,12 @@ GW.Enemy = class Enemy {
   // ── Game Logic ────────────────────────────────────────────
   update(delta, characters) {
     if (!this.alive) return null;
+
+    if (this.revealTimer > 0 && (this.revealTimer -= delta) <= 0) {
+      this.revealed = false;
+      if (this.isStealth && this.container) this.container.setAlpha(0.2);
+    }
+    if (this.slowTimer > 0 && (this.slowTimer -= delta) <= 0) this.slowMultiplier = 1;
 
     const blocker = this._findBlocker(characters);
 
@@ -302,7 +352,7 @@ GW.Enemy = class Enemy {
         }
       }
 
-      const moveAmt = (this.speed * delta) / 1000;
+      const moveAmt = (this.speed * this.slowMultiplier * delta) / 1000;
       this.x -= moveAmt;
       this.container.x = this.x;
     }
@@ -405,7 +455,7 @@ GW.Enemy = class Enemy {
     let blocker = null;
     let closestDist = Infinity;
     for (const ch of characters) {
-      if (!ch.alive) continue;
+      if (!ch.alive || ch.isStealthed) continue;
       if (ch.lane !== this.lane) continue;
       const dist = this.x - ch.x;
       if (dist >= 0 && dist <= THRESHOLD && dist < closestDist) {
@@ -414,6 +464,17 @@ GW.Enemy = class Enemy {
       }
     }
     return blocker;
+  }
+
+  revealFor(duration) {
+    this.revealed = true;
+    this.revealTimer = Math.max(this.revealTimer, duration);
+    if (this.container) this.container.setAlpha(1);
+  }
+
+  applySlow(multiplier, duration) {
+    this.slowMultiplier = Math.min(this.slowMultiplier, multiplier);
+    this.slowTimer = Math.max(this.slowTimer, duration);
   }
 
   takeDamage(amount) {
@@ -525,28 +586,13 @@ GW.Enemy = class Enemy {
 
   _tryDropCurrency() {
     if (!GW.CURRENCY || !this.scene) return;
-    // Randomize drop chance within 10%–25%
-    const dropChance = GW.CURRENCY.DROP_CHANCE_MIN +
-      Math.random() * (GW.CURRENCY.DROP_CHANCE_MAX - GW.CURRENCY.DROP_CHANCE_MIN);
-    if (Math.random() > dropChance) return;
-
-    // Pick currency type by weight
-    const weights = GW.CURRENCY.TYPE_WEIGHTS;
-    const types   = Object.keys(weights);
-    const total   = types.reduce((s, k) => s + weights[k], 0);
-    let r = Math.random() * total;
-    let pickedId = types[types.length - 1];
-    for (const k of types) {
-      r -= weights[k];
-      if (r <= 0) { pickedId = k; break; }
-    }
-    const typeDef = GW.CURRENCY.TYPES[pickedId];
-    if (!typeDef) return;
-
-    // Spawn the currency drop at this alien's position
-    if (this.scene.currencyManager) {
-      this.scene.currencyManager.spawnDrop(this.x, this.y, typeDef);
-    }
+    if (!this.scene.currencyManager) return;
+    Object.entries(GW.CURRENCY.DROP_CHANCES).forEach(([id, range]) => {
+      const chance = range[0] + Math.random() * (range[1] - range[0]);
+      if (Math.random() <= chance && GW.CURRENCY.TYPES[id]) {
+        this.scene.currencyManager.spawnDrop(this.x, this.y, GW.CURRENCY.TYPES[id]);
+      }
+    });
   }
 
   destroy() {

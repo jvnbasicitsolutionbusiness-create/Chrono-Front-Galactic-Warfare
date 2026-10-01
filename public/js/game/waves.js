@@ -140,8 +140,17 @@ GW.WaveManager = class WaveManager {
 
   // ── MODE 1: Normal delay-based spawning ──────────────────
   _beginNormalWave(enemies, waveDef) {
+    let approachDelay = 0;
+    const approachRange = waveDef.approachInterval;
     enemies.forEach((entry, index) => {
-      const timer = this.scene.time.delayedCall(entry.delay || 0, () => {
+      const delay = approachRange
+        ? approachDelay
+        : (entry.delay || 0);
+      if (approachRange) {
+        const [minDelay, maxDelay] = approachRange;
+        approachDelay += minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1));
+      }
+      const timer = this.scene.time.delayedCall(delay, () => {
         this._spawnEnemy(entry, waveDef);
         this._spawnedCount++;
         this._spawnedEntryIndexes.push(index);
@@ -204,7 +213,7 @@ GW.WaveManager = class WaveManager {
   }
 
   _scheduleChainBatch(enemies, waveDef) {
-    const arrival = this._chooseArrivalGroup(enemies.length - this._chainIndex);
+    const arrival = this._chooseArrivalGroup(enemies.length - this._chainIndex, waveDef);
     const groupSize = arrival.size;
     const delay = arrival.delay;
     this._chainBatchSize = groupSize;
@@ -230,10 +239,22 @@ GW.WaveManager = class WaveManager {
     this._spawnTimers.push(this._chainTimer);
   }
 
-  _chooseArrivalGroup(remaining) {
-    const roll = Math.random();
-    const requestedSize = roll < 0.5 ? 1 : roll < 0.7 ? 2 : 3;
+  _chooseArrivalGroup(remaining, waveDef) {
+    const weights = waveDef && waveDef.spawnGroupWeights;
+    let requestedSize;
+    if (weights && weights.length === 3) {
+      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+      let roll = Math.random() * totalWeight;
+      requestedSize = weights.findIndex(weight => (roll -= weight) < 0) + 1;
+    } else {
+      const roll = Math.random();
+      requestedSize = roll < 0.5 ? 1 : roll < 0.7 ? 2 : 3;
+    }
     const size = Math.min(remaining, requestedSize);
+    if (waveDef && waveDef.spawnInterval) {
+      const [minDelay, maxDelay] = waveDef.spawnInterval;
+      return { size, delay: minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1)) };
+    }
     const range = size === 1 ? [12000, 15000] : size === 2 ? [16000, 19000] : [14000, 18000];
     return { size, delay: range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1)) };
   }
@@ -291,7 +312,7 @@ GW.WaveManager = class WaveManager {
       });
       return;
     }
-    const arrival = this._chooseArrivalGroup(pending.length);
+    const arrival = this._chooseArrivalGroup(pending.length, waveDef);
     const timer = this.scene.time.delayedCall(arrival.delay, () => {
       if (this.state !== 'spawning') return;
       const batch = pending.splice(0, arrival.size);
@@ -403,6 +424,16 @@ GW.WaveManager = class WaveManager {
       return;
     }
 
+    if (waveDef.approachInterval) {
+      let delay = 0;
+      const [minDelay, maxDelay] = waveDef.approachInterval;
+      pending.forEach(item => {
+        this._scheduleRestoredBatch([item], waveDef, delay);
+        delay += minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1));
+      });
+      return;
+    }
+
     if (waveDef.isHorde) {
       const flagPending = pending.find(item => item.entry.type === 'vex_flag_bearer');
       const dronesPending = pending.filter(item => item.entry.type !== 'vex_flag_bearer');
@@ -429,7 +460,7 @@ GW.WaveManager = class WaveManager {
 
   _scheduleRestoredBatch(pending, waveDef, delayOverride) {
     if (!pending.length) return;
-    const arrival = this._chooseArrivalGroup(pending.length);
+    const arrival = this._chooseArrivalGroup(pending.length, waveDef);
     const delay = delayOverride == null ? arrival.delay : delayOverride;
     const timer = this.scene.time.delayedCall(delay, () => {
       if (this.state !== 'spawning') return;

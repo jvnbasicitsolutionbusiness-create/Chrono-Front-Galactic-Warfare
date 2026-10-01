@@ -17,9 +17,10 @@ GW.CurrencyDrop = class CurrencyDrop {
     this.gfxOuter.fillStyle(td.glowColor, 0.25); this.gfxOuter.fillCircle(0,0,16);
     this.gfxOuter.x = this.x; this.gfxOuter.y = this.y;
     this.gfxCore = this.scene.add.graphics().setDepth(17);
-    if (td.id === "cash_note") {
-      this.gfxCore.fillStyle(td.color, 0.95); this.gfxCore.fillRoundedRect(-9,-6,18,12,2);
-      this.gfxCore.lineStyle(1, td.glowColor, 0.7); this.gfxCore.strokeRoundedRect(-9,-6,18,12,2);
+    if (td.id === "coin_bag") {
+      this.gfxCore.fillStyle(td.color, 0.95); this.gfxCore.fillRoundedRect(-8,-7,16,15,5);
+      this.gfxCore.lineStyle(2, td.glowColor, 0.8); this.gfxCore.lineBetween(-5,-7,5,-7);
+      this.gfxCore.lineBetween(-4,-10,4,-10);
     } else {
       this.gfxCore.fillStyle(td.color, 0.95); this.gfxCore.fillCircle(0,0,9);
       this.gfxCore.fillStyle(td.glowColor, 0.55); this.gfxCore.fillCircle(-2,-2,3);

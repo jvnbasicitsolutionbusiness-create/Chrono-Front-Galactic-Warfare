@@ -985,12 +985,6 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       if (total > 0) this.uiManager.updateTimelineHead(spawned / total);
     };
 
-    // ── onFlagAlien: flag-carrier enters — warn the player BEFORE head reaches flag ─
-    this.waveManager.onFlagAlien = waveDef => {
-      if (waveDef && waveDef.isHorde) return;
-      this.uiManager.showBigBanner('⚠  FLAG HOLDER DETECTED!', 2200);
-    };
-
     this.combatManager.onEnemyKilled = en => {
       if (window.GWAudio) window.GWAudio.play('alien-death');
       this.uiManager.updateScore(this.playerState.score);
@@ -1349,6 +1343,15 @@ GW.GameScene = class GameScene extends Phaser.Scene {
         hp: character.hp,
         genTimer: character.genTimer,
         attackTimer: character.attackTimer,
+        abilityTimer: character.abilityTimer,
+        shieldHp: character.shieldHp,
+        shieldTimer: character.shieldTimer,
+        attackSpeedMultiplier: character.attackSpeedMultiplier,
+        attackSpeedBuffTimer: character.attackSpeedBuffTimer,
+        genRateMultiplier: character.genRateMultiplier,
+        genBoostTimer: character.genBoostTimer,
+        isStealthed: character.isStealthed,
+        stealthTimer: character.stealthTimer,
       })),
       enemies: this.combatManager.enemies.map(enemy => ({
         id: enemy.id,
@@ -1358,6 +1361,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
         hp: enemy.hp,
         speed: enemy.speed,
         equipmentId: enemy.equipment && enemy.equipment.id,
+        revealed: enemy.revealed,
+        revealTimer: enemy.revealTimer,
+        slowMultiplier: enemy.slowMultiplier,
+        slowTimer: enemy.slowTimer,
       })),
       projectiles: this.projectileManager.projectiles.map(projectile => ({
         kind: projectile instanceof GW.FireProjectile ? 'fire' : 'normal',
@@ -1367,6 +1374,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
         speed: projectile.speed,
         color: projectile.color,
         size: projectile.size,
+        weaponId: projectile.weaponDef && projectile.weaponDef.id,
         age: projectile._age || 0,
         targetIndex: this.combatManager.enemies.indexOf(projectile.target),
       })),
@@ -1422,6 +1430,17 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       character.hp = saved.hp;
       character.genTimer = saved.genTimer;
       character.attackTimer = saved.attackTimer;
+      character.abilityTimer = saved.abilityTimer == null ? character.abilityTimer : saved.abilityTimer;
+      character.shieldHp = saved.shieldHp || 0;
+      character.shieldTimer = saved.shieldTimer || 0;
+      character.attackSpeedMultiplier = saved.attackSpeedMultiplier || 1;
+      character.attackSpeedBuffTimer = saved.attackSpeedBuffTimer || 0;
+      character.attackSpeed = character._baseAttackSpeed * character.attackSpeedMultiplier;
+      character.genRateMultiplier = saved.genRateMultiplier || 1;
+      character.genBoostTimer = saved.genBoostTimer || 0;
+      character.isStealthed = !!saved.isStealthed;
+      character.stealthTimer = saved.stealthTimer || 0;
+      if (character.isStealthed && character.container) character.container.setAlpha(0.45);
       character._updateHpBar();
       if (character.isSupport && character.role === 'energy') {
         character.onGenerateEnergy = (_amount, x, y) => this.resourceManager.spawnGeneratorOrb(x || character.x, y || character.y);
@@ -1437,6 +1456,11 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       enemy.speed = saved.speed;
       enemy.hp = saved.hp;
       enemy.container.setPosition(saved.x, saved.y);
+      enemy.revealed = saved.revealed == null ? enemy.revealed : saved.revealed;
+      enemy.revealTimer = saved.revealTimer || 0;
+      enemy.slowMultiplier = saved.slowMultiplier || 1;
+      enemy.slowTimer = saved.slowTimer || 0;
+      if (enemy.isStealth && !enemy.revealed) enemy.container.setAlpha(0.2);
       if (saved.equipmentId && GW.ALIEN_EQUIPMENT && GW.ALIEN_EQUIPMENT[saved.equipmentId]) {
         enemy.applyEquipment(GW.ALIEN_EQUIPMENT[saved.equipmentId]);
       }
@@ -1449,7 +1473,9 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       if (!target) return;
       const projectile = this.projectileManager.fire(
         saved.x, saved.y, target, saved.damage, saved.color, saved.size,
-        saved.kind === 'fire' ? 'fire' : undefined
+        saved.kind === 'fire' ? 'fire' : undefined,
+        saved.speed,
+        saved.weaponId && GW.WEAPONS[saved.weaponId]
       );
       projectile.speed = saved.speed;
       if (saved.kind === 'fire') {
@@ -1509,18 +1535,11 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════
   // ── Static helper: flag count by environment + level ──
   static _getFlagCount(envId, levelId) {
-    switch (envId) {
-      case 'daytime':
-        // L1-5:  1 flag (single final red flag only)
-        // L6-10: 2 flags (initial horde flag + final red flag)
-        if (!levelId) return 1;
-        return levelId <= 5 ? 1 : 2;
-      case 'nighttime':    return 2;
-      case 'foggy':        return (levelId && (levelId % 10) >= 6) ? 3 : (levelId && (levelId % 10) >= 1 && (levelId % 10) <= 5) ? 2 : 3;
-      case 'rainy_stormy': return 4;
-      case 'radioactive':  return 5;
-      default:             return 1;
-    }
+    if (!levelId || levelId <= 6) return 1;
+    if (levelId <= 14) return 2;
+    if (levelId <= 23) return 3;
+    if (levelId <= 35) return 4;
+    return 5;
   }
 
   _emergencyFallback(err) {

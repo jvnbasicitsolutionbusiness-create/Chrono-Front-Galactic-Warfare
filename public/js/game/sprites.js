@@ -1192,8 +1192,9 @@ GW.SpriteRegistry.registerChar('_default_char', (g, def, frame, state) => {
 
   // ── Archetype flags drive loadout silhouettes ────────────────────────────
   const isSuicide = !!def.isSuicideUnit;
-  const isSupport = !isSuicide && (!!def.isSupport || def.role === 'energy' || def.role === 'support');
-  const hasGun    = !isSuicide && !isSupport && !!def.weapon;
+  const isEnergy  = !isSuicide && (def.role === 'energy' || def.isEnergyGenerator);
+  const isSupport = !isSuicide && !!def.isSupport && !def.weapon;
+  const hasGun    = !isSuicide && !!def.weapon;
 
   // ── Per-state animation parameters ───────────────────────────────────────
   let bob = 0, leanX = 0, recoil = 0, hurtX = 0, falling = 0, muzzle = 0, armSwing = 0;
@@ -1315,9 +1316,23 @@ GW.SpriteRegistry.registerChar('_default_char', (g, def, frame, state) => {
       g.fillStyle(ACCENT, 0.55); g.fillCircle(gx + 27, -6 + by, 8);
     }
   } else if (isSupport) {
-    const pulse = 0.5 + Math.sin(frame * 0.7) * 0.3;
-    g.fillStyle(ACCENT, pulse * 0.4); g.fillCircle(23 + bx, -5 + by, 8);
-    g.fillStyle(ACCENT, pulse);       g.fillCircle(23 + bx, -5 + by, 4);
+    const ability = def.specialAbility;
+    if (isEnergy) {
+      const pulse = 0.5 + Math.sin(frame * 0.7) * 0.3;
+      g.fillStyle(ACCENT, pulse * 0.4); g.fillCircle(23 + bx, -5 + by, 8);
+      g.fillStyle(ACCENT, pulse);       g.fillCircle(23 + bx, -5 + by, 4);
+    } else if (['heal_nearby', 'rapid_repair', 'neutralize_radiation'].includes(ability)) {
+      g.fillStyle(0xf8fafc, 0.95); g.fillRect(19 + bx, -12 + by, 4, 14); g.fillRect(14 + bx, -7 + by, 14, 4);
+    } else if (['energy_shield', 'plasma_barrier', 'multi_buff'].includes(ability)) {
+      g.fillStyle(ACCENT, 0.9);
+      g.fillTriangle(17 + bx, -15 + by, 28 + bx, -10 + by, 25 + bx, 3 + by);
+      g.fillTriangle(25 + bx, 3 + by, 17 + bx, 8 + by, 14 + bx, -10 + by);
+    } else {
+      g.lineStyle(2, ACCENT, 0.9);
+      g.strokeCircle(21 + bx, -5 + by, 7);
+      g.lineBetween(13 + bx, -5 + by, 29 + bx, -5 + by);
+      g.lineBetween(21 + bx, -13 + by, 21 + bx, 3 + by);
+    }
   } else if (!isSuicide) {
     // Melee blade
     _px(g, 20 + bx + recoil, -9 + by, 3, 16, IRON);

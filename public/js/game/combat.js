@@ -47,7 +47,11 @@ GW.CombatManager = class CombatManager {
   _updateCharacters(delta) {
     for (const ch of this.characters) {
       if (!ch.alive) continue;
-      const result = ch.update(delta, this.enemies);
+      const result = ch.update(delta, this.enemies, this.characters);
+      if (result && result.explode) {
+        this._detonateBomb(ch, result);
+        continue;
+      }
       if (result && result.shoot && result.target) {
         // Determine projectile type from weapon definition
         const wpnDef = (ch.def && ch.def.weapon && GW.WEAPONS)
@@ -80,11 +84,33 @@ GW.CombatManager = class CombatManager {
           ch.damage,
           ch.projColor,
           ch.projSize,
-          projType          // 'fire' → GW.FireProjectile; others → default
+          projType,
+          ch.projectileSpeed,
+          wpnDef
         );
         this._pulseAttacker(ch);
       }
     }
+  }
+
+  _detonateBomb(character, blast) {
+    const blastGfx = this.scene.add.graphics().setDepth(26);
+    blastGfx.lineStyle(5, 0xf97316, 0.9);
+    blastGfx.strokeCircle(0, 0, 42);
+    blastGfx.fillStyle(0xfbbf24, 0.4);
+    blastGfx.fillCircle(0, 0, 42);
+    blastGfx.setPosition(character.x, character.y - 8);
+    this.scene.tweens.add({
+      targets: blastGfx, scaleX: 3, scaleY: 3, alpha: 0,
+      duration: 420, ease: 'Power2', onComplete: () => blastGfx.destroy(),
+    });
+
+    this.enemies.forEach(enemy => {
+      if (enemy.alive && Math.abs(enemy.lane - blast.lane) <= 1 && Math.abs(enemy.x - character.x) <= blast.range) {
+        enemy.takeDamage(blast.damage);
+      }
+    });
+    character.die();
   }
 
   _updateEnemies(delta) {

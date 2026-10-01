@@ -90,17 +90,16 @@ GW.RESOURCES = {
 
 // â”€â”€â”€ Galactic Currency System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CURRENCY = {
-  // Drop chances (fraction) when alien is killed
-  DROP_CHANCE_MIN:    0.20,   // 20% minimum drop chance
-  DROP_CHANCE_MAX:    0.30,   // 30% maximum drop chance (capped)
+  // Independent drop chances per kill; a kill can produce more than one type.
+  DROP_CHANCES: { silver_coin: [0.20, 0.30], gold_coin: [0.10, 0.15], emerald: [0.08, 0.12], diamond: [0.05, 0.10], coin_bag: [0.01, 0.03] },
   // Currency types with their values
   TYPES: {
     silver_coin: { id: 'silver_coin',  name: 'Silver Galactic Coin', value: 1,  color: 0xc0c0c0, glowColor: 0xe8e8ff },
-    gold_coin:   { id: 'gold_coin',    name: 'Gold Galactic Coin',   value: 3,  color: 0xffd700, glowColor: 0xffed4a },
-    cash_note:   { id: 'cash_note',    name: 'Galactic Cash Note',   value: 10, color: 0x4ade80, glowColor: 0x86efac },
+    gold_coin:   { id: 'gold_coin',    name: 'Gold Galactic Coin',   value: 5,  color: 0xffd700, glowColor: 0xffed4a },
+    emerald:     { id: 'emerald',      name: 'Emerald Galactic Coin',value: 10, color: 0x10b981, glowColor: 0x6ee7b7 },
+    diamond:     { id: 'diamond',      name: 'Diamond Galactic Coin',value: 15, color: 0x67e8f9, glowColor: 0xcffafe },
+    coin_bag:    { id: 'coin_bag',     name: 'Galactic Coin Bag',    value: 45, color: 0xf59e0b, glowColor: 0xfde68a },
   },
-  // Type weights: silver most common, cash_note rare
-  TYPE_WEIGHTS: { silver_coin: 6, gold_coin: 3, cash_note: 1 },
   LIFETIME:       14000,   // ms before uncollected currency fades
   FLOAT_DURATION:  800,    // ms for collection float animation
 };
@@ -149,41 +148,40 @@ GW.ALIEN_EQUIPMENT = {
 
   bare: {
     id: 'bare', name: 'Common Alien', tier: 1,
-    baseHp: 100, extraHp: 0, totalHp: 100,
+    id: 'night_rifleman', name: 'Night Stalker',
     speedMult: 1.0,
-    equipColor: null, equipName: null,
+    specialAbility: 'stealth',
   },
   cap: {
-    id: 'cap', name: 'Cap Alien', tier: 2,
-    baseHp: 100, extraHp: 20, totalHp: 120,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_12',
+    hp: 90, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     speedMult: 1.0,
     equipColor: 0x1d4ed8, equipName: 'Stolen Cap',
-    breakAnim: 'cap_fall',
-  },
-  iron_mask: {
-    id: 'iron_mask', name: 'Iron Mask Alien', tier: 3,
-    baseHp: 100, extraHp: 50, totalHp: 150,
-    speedMult: 1.0, speedAfterBreak: 1.5,   // 1.5Ã— speed when mask breaks (not 2Ã—)
+    era: 'industrial', role: 'offense', cardSlot: 'adv_13',
+    hp: 80, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
+    isSupport: false,
+    description: 'Uses concealment to avoid alien attacks while firing a service pistol.',
+    baseHp: 200, extraHp: 100, totalHp: 300,
+    specialAbility: 'stealth',
     equipColor: 0x78716c, equipName: 'Iron Mask',
     breakAnim: 'mask_crack',
   },
-  steel_helmet: {
+    hp: 280, weapon: 'rifle', damage: 45, attackSpeed: 1600, range: 420,
     id: 'steel_helmet', name: 'Steel Helmet Alien', tier: 4,
-    baseHp: 100, extraHp: 75, totalHp: 175,
-    speedMult: 1.0,
-    equipColor: 0x6b7280, equipName: 'Steel Helmet',
-    breakAnim: 'helmet_break',
-  },
+    baseHp: 200, extraHp: 150, totalHp: 350,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_15',
+    hp: 80, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
+    isSupport: false,
+    description: 'Conceals itself and attacks from close range.',
   armored_vest: {
-    id: 'armored_vest', name: 'Armored Vest Alien', tier: 5,
-    baseHp: 100, extraHp: 100, totalHp: 200,
+    specialAbility: 'stealth',
+    baseHp: 200, extraHp: 220, totalHp: 420,
     speedMult: 0.85,
-    equipColor: 0x374151, equipName: 'Metal Vest',
-    breakAnim: 'vest_shatter',
-  },
-  shield: {
+    era: 'modern', role: 'offense', cardSlot: 'adv_16',
+    hp: 85, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
+    isSupport: false,
+    description: 'Silent long-range marksman with a high-powered rifle.',
     id: 'shield', name: 'Shield Alien', tier: 5,
-    baseHp: 100, extraHp: 100, totalHp: 200,
     speedMult: 0.8,
     equipColor: 0x0369a1, equipName: 'Energy Shield',
     breakAnim: 'shield_break',
@@ -191,21 +189,21 @@ GW.ALIEN_EQUIPMENT = {
   },
   heavy_helmet: {
     id: 'heavy_helmet', name: 'Heavy Helmet Alien', tier: 6,
-    baseHp: 100, extraHp: 125, totalHp: 225,
+    baseHp: 200, extraHp: 300, totalHp: 500,
     speedMult: 0.8,
     equipColor: 0x1e3a5f, equipName: 'Reinforced Helmet',
     breakAnim: 'heavy_helmet_break',
   },
   full_armor: {
     id: 'full_armor', name: 'Full Armor Alien', tier: 7,
-    baseHp: 100, extraHp: 150, totalHp: 250,
+    baseHp: 200, extraHp: 400, totalHp: 600,
     speedMult: 0.75,
     equipColor: 0x1f2937, equipName: 'Full Armor',
     breakAnim: 'armor_collapse',
   },
   riot_shield: {
     id: 'riot_shield', name: 'Riot Shield Alien', tier: 8,
-    baseHp: 100, extraHp: 175, totalHp: 275,
+    baseHp: 200, extraHp: 600, totalHp: 800,
     speedMult: 0.7,
     equipColor: 0x0c1445, equipName: 'Heavy Shield + Helmet',
     breakAnim: 'riot_break',
@@ -213,10 +211,30 @@ GW.ALIEN_EQUIPMENT = {
   },
   tactical_armor: {
     id: 'tactical_armor', name: 'Tactical Armor Alien', tier: 9,
-    baseHp: 100, extraHp: 200, totalHp: 300,
+    baseHp: 200, extraHp: 800, totalHp: 1000,
     speedMult: 0.8,
     equipColor: 0x292524, equipName: 'Combat Armor',
     breakAnim: 'tactical_shatter',
+  },
+  wooden_shield: {
+    id: 'wooden_shield', name: 'Wooden Shield Alien', tier: 4,
+    baseHp: 200, extraHp: 100, totalHp: 300, speedMult: 0.95,
+    equipColor: 0x92400e, equipName: 'Wooden Shield',
+  },
+  bicycle: {
+    id: 'bicycle', name: 'Bicycle Alien', tier: 4,
+    baseHp: 200, extraHp: 50, totalHp: 250, speedMult: 1.4,
+    equipColor: 0x0f766e, equipName: 'Bicycle',
+  },
+  newspaper: {
+    id: 'newspaper', name: 'Newspaper Alien', tier: 4,
+    baseHp: 200, extraHp: 50, totalHp: 250, speedMult: 1.0,
+    equipColor: 0xe5e7eb, equipName: 'Newspaper Armor',
+  },
+  museum_armor: {
+    id: 'museum_armor', name: 'Museum Armor Alien', tier: 5,
+    baseHp: 200, extraHp: 300, totalHp: 500, speedMult: 0.8,
+    equipColor: 0x78716c, equipName: 'Museum Suit of Armor',
   },
 };
 
@@ -291,7 +309,7 @@ GW.WEAPONS = {
   },
   hand_cannon: {
     id: 'hand_cannon', name: 'Hand Cannon', era: 'early',
-    damage: 40, attackSpeed: 2200, range: 320,
+    damage: 40, attackSpeed: 2200, range: 450, projectileSpeed: 523,
     projectileColor: 0xd97706, projectileSize: 6, projectileType: 'cannonball',
     description: 'Early-era hand-held cannon. Slow reload, powerful at range.',
   },
@@ -303,7 +321,7 @@ GW.WEAPONS = {
   },
   arquebus: {
     id: 'arquebus', name: 'Arquebus', era: 'early',
-    damage: 30, attackSpeed: 2400, range: 300,
+    damage: 30, attackSpeed: 2400, range: 450, projectileSpeed: 732,
     projectileColor: 0xfde68a, projectileSize: 5, projectileType: 'bullet',
     description: 'Early matchlock firearm.',
   },
@@ -316,7 +334,7 @@ GW.WEAPONS = {
   },
   sniper_rifle: {
     id: 'sniper_rifle', name: 'Sniper Rifle', era: 'industrial',
-    damage: 120, attackSpeed: 4000, range: 520,
+    damage: 120, attackSpeed: 4000, range: 700, projectileSpeed: 732,
     projectileColor: 0xfef3c7, projectileSize: 4, projectileType: 'sniper',
     description: 'Very high damage, very slow fire rate. Long range.',
   },
@@ -350,6 +368,24 @@ GW.WEAPONS = {
     damage: 140, attackSpeed: 5000, range: 480,
     projectileColor: 0xef4444, projectileSize: 9, projectileType: 'rocket',
     splash: 100, description: 'High damage rocket. Large explosion.',
+  },
+  tank_cannon: {
+    id: 'tank_cannon', name: 'Tank Cannon', era: 'modern',
+    damage: 90, attackSpeed: 3500, range: 500, projectileSpeed: 440,
+    projectileColor: 0xf59e0b, projectileSize: 10, projectileType: 'cannonball',
+    splash: 80, description: 'Heavy cannon shell with a controlled blast radius.',
+  },
+  torpedo_launcher: {
+    id: 'torpedo_launcher', name: 'Torpedo Launcher', era: 'modern',
+    damage: 90, attackSpeed: 4800, range: 550, projectileSpeed: 300,
+    projectileColor: 0x38bdf8, projectileSize: 9, projectileType: 'torpedo',
+    splash: 130, description: 'Long-range torpedo with a wide impact blast.',
+  },
+  chemical_launcher: {
+    id: 'chemical_launcher', name: 'Chemical Launcher', era: 'advanced',
+    damage: 45, attackSpeed: 3000, range: 420, projectileSpeed: 320,
+    projectileColor: 0x84cc16, projectileSize: 8, projectileType: 'gas',
+    splash: 95, description: 'Chemical payload spreads damage across a compact area.',
   },
   // Era: advanced
   plasma_rifle: {
@@ -386,7 +422,7 @@ GW.CARDS = {
 
   // â•â•â• STARTING CARDS (2) â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   plasma_energy_generator: {
-    id: 'plasma_energy_generator', name: 'Plasma Generator',
+    id: 'plasma_energy_generator', name: 'Plasma Energy Generator',
     era: 'early', role: 'energy', cardSlot: 'start_1',
     // v1.0.1 NERF: HP reduced from 100 to 50
     hp: 50, weapon: null, damage: 0, attackSpeed: 0, range: 0,
@@ -422,17 +458,18 @@ GW.CARDS = {
 
   // â•â•â• LEVEL 1 REWARD â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   bomber: {
-    id: 'bomber', name: 'The Bomb Man',
+    id: 'bomber', name: 'Bombman',
     era: 'early', role: 'offense', cardSlot: 'adv_1',
-    hp: 70, weapon: null, damage: 80, attackSpeed: 2800, range: 120,
+    hp: 70, weapon: null, damage: 500, attackSpeed: 0, range: 260,
     cost: 120, unlockLevel: 1, isBossReward: false,
     rarity: 'common',
     deployCooldown: 12000,  // 12s deploy cooldown
     color: 0x7f1d1d, accentColor: 0xfca5a5,
     helmetColor: 0x450a0a, skinColor: 0xd4956a,
     isSupport: false,
-    isSuicideUnit: true,    // explodes on contact, destroys self
-    description: 'Runs into alien lines and self-destructs. 80 AoE damage. 50s cooldown.',
+    isSuicideUnit: true,
+    fuseDuration: 2500,
+    description: 'Plants a warning charge that explodes after 2.5 seconds for 500 damage across three lanes.',
     environment: 'daytime',
     strengthsText: 'High burst AoE. Clears clustered aliens.',
     weaknessesText: 'Destroys itself on use. Long cooldown.',
@@ -442,7 +479,7 @@ GW.CARDS = {
   hand_cannon_soldier: {
     id: 'hand_cannon_soldier', name: 'Rifleman',
     era: 'early_15c', role: 'offense', cardSlot: 'adv_2',
-    hp: 150, weapon: 'hand_cannon', damage: 40, attackSpeed: 2200, range: 320,
+    hp: 150, weapon: 'hand_cannon', damage: 40, attackSpeed: 2200, range: 450,
     cost: 100, unlockLevel: 2, isBossReward: false,
     color: 0x5c3d1e, accentColor: 0xd97706,
     helmetColor: 0x3d2008, skinColor: 0xd4956a,
@@ -455,101 +492,100 @@ GW.CARDS = {
   arquebus_soldier: {
     id: 'arquebus_soldier', name: 'Sniper',
     era: 'early_16c', role: 'offense', cardSlot: 'adv_3',
-    hp: 130, weapon: 'arquebus', damage: 30, attackSpeed: 2400, range: 300,
+    hp: 130, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 100, unlockLevel: 3, isBossReward: false,
     color: 0x6b4c1e, accentColor: 0xd97706,
     helmetColor: 0x3d2a0a, skinColor: 0xd4956a,
     isSupport: false,
-    description: 'Early matchlock soldier. Steady fire rate.',
+    description: 'Long-range sniper rifle delivers precise, high-impact shots.',
     environment: 'daytime',
   },
 
   // Level 4 reward
   pikeman: {
     id: 'pikeman', name: 'Heavy Gunner',
-    era: 'early_15c', role: 'defense', cardSlot: 'adv_4',
-    hp: 220, weapon: null, damage: 15, attackSpeed: 1200, range: 60,
+    era: 'early_15c', role: 'heavy', cardSlot: 'adv_4',
+    hp: 220, weapon: 'machine_gun', damage: 20, attackSpeed: 600, range: 340,
     cost: 75, unlockLevel: 4, isBossReward: false,
     color: 0x4a3728, accentColor: 0x7c5c2a,
     isSupport: false,
-    description: 'Armed with a long pike. Blocks and attacks at close range.',
+    description: 'Heavy gunner suppresses aliens with sustained machine-gun fire.',
     environment: 'daytime',
   },
 
   // Level 5 reward (Creator Bitos event level)
   drummer_boy: {
     id: 'drummer_boy', name: 'Rocket Trooper',
-    era: 'early', role: 'support', cardSlot: 'adv_5',
-    hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'early', role: 'heavy', cardSlot: 'adv_5',
+    hp: 80, weapon: 'rocket_launcher', damage: 140, attackSpeed: 5000, range: 480,
     cost: 75, unlockLevel: 5, isBossReward: false,
     color: 0x7c5c2a, accentColor: 0xd97706,
-    isSupport: true,
-    description: 'Increases nearby soldiers\' attack speed. Classic support unit.',
+    isSupport: false,
+    description: 'Fires heavy rockets that blast nearby aliens.',
     environment: 'daytime',
-    specialAbility: 'speed_boost',
   },
 
   // Level 6 reward
   field_cannon: {
     id: 'field_cannon', name: 'Combat Medic',
-    era: 'early_18c', role: 'artillery', cardSlot: 'adv_6',
-    hp: 180, weapon: 'mortar', damage: 75, attackSpeed: 4500, range: 450,
+    era: 'early_18c', role: 'medic', cardSlot: 'adv_6',
+    hp: 180, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 175, unlockLevel: 6, isBossReward: false,
     color: 0x374151, accentColor: 0x9ca3af,
-    isSupport: false,
-    description: 'Field artillery. High splash damage. Slow reload.',
+    isSupport: true,
+    description: 'Fires a service pistol and heals nearby defenders over time.',
     environment: 'daytime',
+    specialAbility: 'heal_nearby',
   },
 
   // Level 7 reward
   supply_officer: {
     id: 'supply_officer', name: 'Shield Soldier',
-    era: 'early', role: 'energy', cardSlot: 'adv_7',
+    era: 'early', role: 'defense', cardSlot: 'adv_7',
     hp: 90, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 75, unlockLevel: 7, isBossReward: false,
     color: 0x92400e, accentColor: 0xfbbf24,
-    isSupport: true, genInterval: 14000, genAmount: 30,
-    description: 'Faster plasma generation than basic generator.',
+    isSupport: true,
+    description: 'Recharges a protective shield on nearby defenders.',
     environment: 'daytime',
-    specialAbility: 'generate_plasma',
+    specialAbility: 'energy_shield',
   },
 
   // Level 8 reward
   sharpshooter: {
     id: 'sharpshooter', name: 'Machine Gunner',
     era: 'industrial', role: 'offense', cardSlot: 'adv_8',
-    hp: 120, weapon: 'rifle', damage: 45, attackSpeed: 1600, range: 420,
+    hp: 120, weapon: 'machine_gun', damage: 20, attackSpeed: 600, range: 340,
     cost: 125, unlockLevel: 8, isBossReward: false,
     color: 0x3d4a2a, accentColor: 0x65a30d,
     helmetColor: 0x1e2d0e, skinColor: 0xc8956a,
     isSupport: false,
-    description: 'Bolt-action rifle. Accurate at range.',
+    description: 'Sustained machine-gun fire for defending a lane.',
     environment: 'daytime',
   },
 
   // Level 9 reward
   field_medic_early: {
     id: 'field_medic_early', name: 'Grenadier',
-    era: 'industrial', role: 'medic', cardSlot: 'adv_9',
-    hp: 100, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_9',
+    hp: 100, weapon: 'grenade_launcher', damage: 80, attackSpeed: 3000, range: 400,
     cost: 100, unlockLevel: 9, isBossReward: false,
     color: 0xdcfce7, accentColor: 0xffffff,
-    isSupport: true,
-    description: 'Heals nearby units. Basic medical support.',
+    isSupport: false,
+    description: 'Lobs grenades that damage groups of aliens.',
     environment: 'daytime',
-    specialAbility: 'heal_nearby',
   },
 
   // Level 10 reward (digital briefing milestone)
   machine_gunner: {
     id: 'machine_gunner', name: 'Tank Commander',
-    era: 'modern', role: 'offense', cardSlot: 'adv_10',
-    hp: 200, weapon: 'machine_gun', damage: 20, attackSpeed: 600, range: 320,
+    era: 'modern', role: 'heavy', cardSlot: 'adv_10',
+    hp: 200, weapon: 'tank_cannon', damage: 90, attackSpeed: 3500, range: 500,
     cost: 200, unlockLevel: 10, isBossReward: false,
     color: 0x374151, accentColor: 0x9ca3af,
     helmetColor: 0x1f2937, skinColor: 0xc8956a,
     isSupport: false,
-    description: 'Rapid-fire machine gun. High sustained DPS.',
+    description: 'Tank cannon fires heavy shells with a blast radius.',
     environment: 'daytime',
   },
 
@@ -564,17 +600,18 @@ GW.CARDS = {
     isSupport: false,
     description: 'Trained for night operations. Better accuracy in low light.',
     environment: 'nighttime',
+    specialAbility: 'stealth',
   },
 
   // Level 12 reward
   scout: {
     id: 'scout', name: 'Shadow Sniper',
-    era: 'industrial', role: 'recon', cardSlot: 'adv_12',
-    hp: 90, weapon: 'service_pistol', damage: 25, attackSpeed: 1200, range: 280,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_12',
+    hp: 90, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 75, unlockLevel: 12, isBossReward: false,
     color: 0x2d3a2a, accentColor: 0x6b9e6b,
     isSupport: false,
-    description: 'Fast detection. Reveals hidden alien threats.',
+    description: 'Long-range sniper detects and eliminates concealed alien threats.',
     environment: 'nighttime',
     specialAbility: 'detect',
   },
@@ -582,52 +619,52 @@ GW.CARDS = {
   // Level 13 reward
   flare_operator: {
     id: 'flare_operator', name: 'Stealth Operative',
-    era: 'industrial', role: 'support', cardSlot: 'adv_13',
-    hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_13',
+    hp: 80, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 75, unlockLevel: 13, isBossReward: false,
     color: 0xfbbf24, accentColor: 0xfef08a,
-    isSupport: true,
-    description: 'Launches flares. Illuminates night lanes. Reveals stealth aliens.',
+    isSupport: false,
+    description: 'Uses concealment to avoid alien attacks while firing a service pistol.',
     environment: 'nighttime',
-    specialAbility: 'illuminate',
+    specialAbility: 'stealth',
   },
 
   // Level 14 reward
   trench_soldier: {
     id: 'trench_soldier', name: 'Night Vision Gunner',
     era: 'industrial', role: 'defense', cardSlot: 'adv_14',
-    hp: 280, weapon: 'musket', damage: 35, attackSpeed: 2000, range: 240,
+    hp: 280, weapon: 'rifle', damage: 45, attackSpeed: 1600, range: 420,
     cost: 150, unlockLevel: 14, isBossReward: false,
     color: 0x4a3728, accentColor: 0x9c7a4a,
     isSupport: false,
-    description: 'Digs in and holds position. High HP. Short range.',
+    description: 'Night-vision optics reveal concealed aliens for the whole defense.',
     environment: 'nighttime',
+    specialAbility: 'detect',
   },
 
   // Level 15 reward (Creator Bitos event level)
   searchlight_operator: {
     id: 'searchlight_operator', name: 'Tactical Assassin',
-    era: 'industrial', role: 'support', cardSlot: 'adv_15',
-    hp: 80, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'industrial', role: 'offense', cardSlot: 'adv_15',
+    hp: 80, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 100, unlockLevel: 15, isBossReward: false,
     color: 0xfef08a, accentColor: 0xfbbf24,
-    isSupport: true,
-    description: 'Sweeping searchlight. Dramatically extends detection range.',
+    isSupport: false,
+    description: 'Conceals itself and attacks from close range.',
     environment: 'nighttime',
-    specialAbility: 'searchlight',
+    specialAbility: 'stealth',
   },
 
   // Level 16 reward
   radio_operator: {
     id: 'radio_operator', name: 'Silent Ranger',
-    era: 'modern', role: 'support', cardSlot: 'adv_16',
-    hp: 85, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'modern', role: 'offense', cardSlot: 'adv_16',
+    hp: 85, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 100, unlockLevel: 16, isBossReward: false,
     color: 0x374151, accentColor: 0x93c5fd,
-    isSupport: true,
-    description: 'Calls in air support. Special airstrike ability on cooldown.',
+    isSupport: false,
+    description: 'Silent long-range marksman with a high-powered rifle.',
     environment: 'nighttime',
-    specialAbility: 'airstrike',
   },
 
   // Level 17 reward
@@ -640,26 +677,27 @@ GW.CARDS = {
     isSupport: false,
     description: 'Heavy armor. Absorbs damage for nearby allies.',
     environment: 'nighttime',
+    specialAbility: 'energy_shield',
   },
 
   // Level 18 reward
   night_medic: {
     id: 'night_medic', name: 'Recon Specialist',
-    era: 'modern', role: 'medic', cardSlot: 'adv_18',
-    hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'modern', role: 'recon', cardSlot: 'adv_18',
+    hp: 110, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 125, unlockLevel: 18, isBossReward: false,
     color: 0x1d4ed8, accentColor: 0x93c5fd,
-    isSupport: true,
-    description: 'Enhanced field medic. Faster healing rate.',
+    isSupport: false,
+    description: 'Reveals hidden alien threats while defending its lane.',
     environment: 'nighttime',
-    specialAbility: 'heal_nearby',
+    specialAbility: 'detect',
   },
 
   // Level 19 reward
   sniper: {
     id: 'sniper', name: 'Night Hunter',
     era: 'industrial', role: 'offense', cardSlot: 'adv_19',
-    hp: 100, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 520,
+    hp: 100, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 175, unlockLevel: 19, isBossReward: false,
     color: 0x2d3a1a, accentColor: 0x65a30d,
     helmetColor: 0x1a2d0a, skinColor: 0xc8956a,
@@ -672,13 +710,13 @@ GW.CARDS = {
   recon_unit: {
     id: 'recon_unit', name: 'Shadow Commander',
     era: 'modern', role: 'recon', cardSlot: 'adv_20',
-    hp: 90, weapon: 'service_pistol', damage: 20, attackSpeed: 1000, range: 350,
+    hp: 90, weapon: 'rifle', damage: 45, attackSpeed: 1600, range: 420,
     cost: 100, unlockLevel: 20, isBossReward: false,
     color: 0x2d3a2a, accentColor: 0x86efac,
     isSupport: false,
-    description: 'Advanced detection unit. Reveals fog/stealth threats.',
+    description: 'Commander reveals threats and accelerates nearby defenders.',
     environment: 'foggy',
-    specialAbility: 'detect',
+    specialAbility: 'speed_boost',
   },
 
   // Level 21 reward
@@ -689,7 +727,7 @@ GW.CARDS = {
     cost: 125, unlockLevel: 21, isBossReward: false,
     color: 0x4a5a2a, accentColor: 0x9ca3af,
     isSupport: false,
-    description: 'Equipped for fog and gas conditions. Immune to visibility penalties.',
+    description: 'Rifleman equipped for flooded battlefield conditions.',
     environment: 'foggy',
   },
 
@@ -697,32 +735,31 @@ GW.CARDS = {
   mortar_team: {
     id: 'mortar_team', name: 'Depth Diver',
     era: 'industrial', role: 'artillery', cardSlot: 'adv_22',
-    hp: 150, weapon: 'mortar', damage: 85, attackSpeed: 4500, range: 480,
+    hp: 150, weapon: 'torpedo_launcher', damage: 90, attackSpeed: 4800, range: 550,
     cost: 175, unlockLevel: 22, isBossReward: false,
     color: 0x374151, accentColor: 0x6b7280,
     isSupport: false,
-    description: 'Lobbed mortar shells. Large area of effect.',
+    description: 'Long-range torpedoes burst across nearby alien lanes.',
     environment: 'foggy',
   },
 
   // Level 23 reward
   field_mechanic: {
     id: 'field_mechanic', name: 'Torpedo Soldier',
-    era: 'modern', role: 'engineer', cardSlot: 'adv_23',
-    hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'modern', role: 'artillery', cardSlot: 'adv_23',
+    hp: 110, weapon: 'torpedo_launcher', damage: 90, attackSpeed: 4800, range: 550,
     cost: 125, unlockLevel: 23, isBossReward: false,
     color: 0xfbbf24, accentColor: 0xf59e0b,
-    isSupport: true,
-    description: 'Repairs damaged units. Extends their effectiveness.',
+    isSupport: false,
+    description: 'Launches torpedoes that detonate across nearby alien lanes.',
     environment: 'foggy',
-    specialAbility: 'repair',
   },
 
   // Level 24 reward
   heavy_rifleman: {
     id: 'heavy_rifleman', name: 'Hydro Gunner',
     era: 'modern', role: 'offense', cardSlot: 'adv_24',
-    hp: 190, weapon: 'rifle', damage: 55, attackSpeed: 1600, range: 380,
+    hp: 190, weapon: 'machine_gun', damage: 25, attackSpeed: 800, range: 340,
     cost: 150, unlockLevel: 24, isBossReward: false,
     color: 0x374151, accentColor: 0x9ca3af,
     isSupport: false,
@@ -747,11 +784,11 @@ GW.CARDS = {
   modern_rifleman: {
     id: 'modern_rifleman', name: 'Naval Sniper',
     era: 'modern', role: 'offense', cardSlot: 'adv_26',
-    hp: 170, weapon: 'machine_gun', damage: 25, attackSpeed: 800, range: 320,
+    hp: 170, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 175, unlockLevel: 26, isBossReward: false,
     color: 0x2d3a4a, accentColor: 0x4b6cb7,
     isSupport: false,
-    description: 'Modern assault rifle. Balanced fire rate and damage.',
+    description: 'Naval sniper rifle with extreme range and high impact.',
     environment: 'rainy_stormy',
   },
 
@@ -771,21 +808,20 @@ GW.CARDS = {
   // Level 28 reward
   combat_medic: {
     id: 'combat_medic', name: 'Aqua Grenadier',
-    era: 'modern', role: 'medic', cardSlot: 'adv_28',
-    hp: 130, weapon: 'service_pistol', damage: 15, attackSpeed: 1600, range: 200,
+    era: 'modern', role: 'offense', cardSlot: 'adv_28',
+    hp: 130, weapon: 'grenade_launcher', damage: 80, attackSpeed: 3000, range: 400,
     cost: 150, unlockLevel: 28, isBossReward: false,
     color: 0xdcfce7, accentColor: 0xffffff,
-    isSupport: true,
-    description: 'Can fight and heal. Versatile support/offense hybrid.',
+    isSupport: false,
+    description: 'Lobs aqua grenades that splash across clustered enemies.',
     environment: 'rainy_stormy',
-    specialAbility: 'heal_nearby',
   },
 
   // Level 29 reward
   drone_operator: {
     id: 'drone_operator', name: 'Sea Raider',
     era: 'modern', role: 'aerial', cardSlot: 'adv_29',
-    hp: 100, weapon: null, damage: 40, attackSpeed: 2000, range: 500,
+    hp: 100, weapon: 'machine_gun', damage: 25, attackSpeed: 800, range: 340,
     cost: 200, unlockLevel: 29, isBossReward: false,
     color: 0x374151, accentColor: 0x93c5fd,
     isSupport: false,
@@ -809,27 +845,26 @@ GW.CARDS = {
   // Level 31 reward
   mobile_generator: {
     id: 'mobile_generator', name: 'Fog Recon',
-    era: 'modern', role: 'energy', cardSlot: 'adv_31',
-    hp: 140, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'modern', role: 'recon', cardSlot: 'adv_31',
+    hp: 140, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 100, unlockLevel: 31, isBossReward: false,
     color: 0xfbbf24, accentColor: 0xf59e0b,
-    isSupport: true, genInterval: 10000, genAmount: 30,
-    description: 'Faster plasma generation. Better than basic generator.',
+    isSupport: false,
+    description: 'Scouts through fog and reveals concealed alien threats.',
     environment: 'rainy_stormy',
-    specialAbility: 'generate_plasma',
+    specialAbility: 'detect',
   },
 
   // Level 32 reward
   plasma_tech_engineer: {
     id: 'plasma_tech_engineer', name: 'Mist Sniper',
-    era: 'advanced', role: 'engineer', cardSlot: 'adv_32',
-    hp: 120, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'advanced', role: 'offense', cardSlot: 'adv_32',
+    hp: 120, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 150, unlockLevel: 32, isBossReward: false,
     color: 0x7c3aed, accentColor: 0xc4b5fd,
-    isSupport: true,
-    description: 'Plasma technology specialist. Boosts energy generation.',
+    isSupport: false,
+    description: 'Long-range sniper trained to fire through dense mist.',
     environment: 'rainy_stormy',
-    specialAbility: 'boost_regen',
   },
 
   // Level 33 reward
@@ -840,32 +875,34 @@ GW.CARDS = {
     cost: 175, unlockLevel: 33, isBossReward: false,
     color: 0x4d6b2a, accentColor: 0x84cc16,
     isSupport: false,
-    description: 'Grenade launcher. Splash damage effective against groups.',
+    description: 'Grenade launcher leaves a slowing smoke cloud on impact.',
     environment: 'rainy_stormy',
+    specialAbility: 'smoke_bomb',
   },
 
   // Level 34 reward
   hazmat_trooper: {
     id: 'hazmat_trooper', name: 'Radar Specialist',
-    era: 'advanced', role: 'offense', cardSlot: 'adv_34',
-    hp: 160, weapon: 'plasma_rifle', damage: 55, attackSpeed: 1400, range: 360,
+    era: 'advanced', role: 'recon', cardSlot: 'adv_34',
+    hp: 160, weapon: 'service_pistol', damage: 25, attackSpeed: 1400, range: 300,
     cost: 200, unlockLevel: 34, isBossReward: false,
     color: 0xfde68a, accentColor: 0xfbbf24,
     helmetColor: 0xca8a04, skinColor: 0xfbbf24,
     isSupport: false,
-    description: 'Radiation-resistant trooper. Effective in radioactive environments.',
+    description: 'Radar pulses reveal hidden threats and improve lane awareness.',
     environment: 'radioactive',
+    specialAbility: 'detect',
   },
 
   // Level 35 reward (Creator Bitos event level)
   radiation_specialist: {
     id: 'radiation_specialist', name: 'Chemical Warfare Soldier',
-    era: 'advanced', role: 'support', cardSlot: 'adv_35',
-    hp: 100, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'advanced', role: 'offense', cardSlot: 'adv_35',
+    hp: 100, weapon: 'chemical_launcher', damage: 45, attackSpeed: 3000, range: 420,
     cost: 125, unlockLevel: 35, isBossReward: false,
     color: 0x65a30d, accentColor: 0xd9f99d,
-    isSupport: true,
-    description: 'Neutralizes radioactive hazards. Protects nearby units from rad damage.',
+    isSupport: false,
+    description: 'Launches chemical payloads and shields nearby allies from hazards.',
     environment: 'radioactive',
     specialAbility: 'neutralize_radiation',
   },
@@ -886,26 +923,27 @@ GW.CARDS = {
   // Level 37 reward
   energy_shield_generator: {
     id: 'energy_shield_generator', name: 'Fog Bomber',
-    era: 'advanced', role: 'defense', cardSlot: 'adv_37',
-    hp: 160, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'advanced', role: 'offense', cardSlot: 'adv_37',
+    hp: 160, weapon: 'grenade_launcher', damage: 80, attackSpeed: 3000, range: 400,
     cost: 200, unlockLevel: 37, isBossReward: false,
     color: 0x1d4ed8, accentColor: 0x67e8f9,
-    isSupport: true,
-    description: 'Deploys large energy shield protecting an entire lane section.',
+    isSupport: false,
+    description: 'Drops a fog bomb that slows aliens caught in its blast.',
     environment: 'radioactive',
-    specialAbility: 'large_shield',
+    specialAbility: 'fog_bomb',
   },
 
   // Level 38 reward
   combat_drone: {
     id: 'combat_drone', name: 'Tactical Spotter',
-    era: 'futuristic', role: 'aerial', cardSlot: 'adv_38',
+    era: 'futuristic', role: 'recon', cardSlot: 'adv_38',
     hp: 80, weapon: 'laser_weapon', damage: 70, attackSpeed: 900, range: 460,
     cost: 250, unlockLevel: 38, isBossReward: false,
     color: 0x0891b2, accentColor: 0x67e8f9,
     isSupport: false,
     description: 'Autonomous laser drone. Rapid-fire aerial attacker.',
     environment: 'radioactive',
+    specialAbility: 'detect',
   },
 
   // Level 39 reward
@@ -918,6 +956,7 @@ GW.CARDS = {
     isSupport: false,
     description: 'Self-operating combat robot. No morale issues.',
     environment: 'radioactive',
+    specialAbility: 'stealth',
   },
 
   // Level 40 reward (digital briefing milestone)
@@ -941,19 +980,20 @@ GW.CARDS = {
     color: 0x0891b2, accentColor: 0x67e8f9,
     helmetColor: 0x0e7490, skinColor: 0xfbbf24,
     isSupport: false,
-    description: 'Laser carbine. Piercing shots. Futuristic precision.',
+    description: 'Laser carbine pierces targets; the hazmat suit protects nearby allies.',
     environment: 'radioactive',
+    specialAbility: 'neutralize_radiation',
   },
 
   // Level 42 reward
   energy_specialist: {
     id: 'energy_specialist', name: 'Radiation Gunner',
-    era: 'advanced', role: 'energy', cardSlot: 'adv_42',
-    hp: 110, weapon: null, damage: 0, attackSpeed: 0, range: 0,
+    era: 'advanced', role: 'offense', cardSlot: 'adv_42',
+    hp: 110, weapon: 'plasma_rifle', damage: 60, attackSpeed: 1200, range: 420,
     cost: 175, unlockLevel: 42, isBossReward: false,
     color: 0xfef08a, accentColor: 0xfbbf24,
-    isSupport: true, genInterval: 8000, genAmount: 35,
-    description: 'Expert energy management. Fastest plasma generation unit.',
+    isSupport: false,
+    description: 'Radiation gunner boosts allied energy units while firing plasma.',
     environment: 'radioactive',
     specialAbility: 'boost_regen',
   },
@@ -999,7 +1039,7 @@ GW.CARDS = {
   advanced_combatant: {
     id: 'advanced_combatant', name: 'Atomic Sniper',
     era: 'futuristic', role: 'offense', cardSlot: 'adv_46',
-    hp: 230, weapon: 'plasma_rifle', damage: 100, attackSpeed: 1100, range: 460,
+    hp: 230, weapon: 'sniper_rifle', damage: 120, attackSpeed: 4000, range: 700,
     cost: 325, unlockLevel: 46, isBossReward: false,
     color: 0x1e1b4b, accentColor: 0x818cf8,
     isSupport: false,
@@ -1064,6 +1104,53 @@ GW.CARDS = {
 };
 
 // â”€â”€â”€ CARD COUNT VALIDATION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+GW.CARD_ABILITY_RULES = {
+  speed_boost: { cooldown: 9000, duration: 6000, radius: 240, laneRadius: 1, attackSpeedMultiplier: 0.75, color: 0xfbbf24 },
+  stealth: { cooldown: 12000, duration: 5000, self: true, color: 0x67e8f9 },
+  detect: { cooldown: 7000, duration: 9000, reveal: true, color: 0x22d3ee },
+  energy_shield: { cooldown: 9000, duration: 7000, radius: 220, laneRadius: 1, shield: 60, color: 0x38bdf8 },
+  heal_nearby: { cooldown: 5000, radius: 240, laneRadius: 1, heal: 40, color: 0x4ade80 },
+  artillery_call: { cooldown: 12000, range: 900, splash: 130, damage: 90, allLanes: true, color: 0xf97316 },
+  deploy_drone: { cooldown: 5000, range: 650, damage: 45, allLanes: true, color: 0x67e8f9 },
+  boost_regen: { cooldown: 9000, duration: 7000, radius: 700, laneRadius: 5, regenMultiplier: 1.6, color: 0xfbbf24 },
+  smoke_bomb: { cooldown: 9000, range: 550, splash: 100, duration: 5000, slowMultiplier: 0.55, color: 0x9ca3af },
+  neutralize_radiation: { cooldown: 10000, duration: 8000, radius: 260, laneRadius: 1, shield: 50, heal: 15, color: 0x84cc16 },
+  fog_bomb: { cooldown: 10000, range: 600, splash: 130, damage: 80, duration: 6000, slowMultiplier: 0.55, color: 0x67e8f9 },
+  multi_buff: { cooldown: 10000, duration: 7000, radius: 260, laneRadius: 1, heal: 25, shield: 40, attackSpeedMultiplier: 0.82, color: 0xa78bfa },
+  rapid_repair: { cooldown: 6000, radius: 260, laneRadius: 1, heal: 80, color: 0x4ade80 },
+  ammo_boost: { cooldown: 9000, duration: 6500, radius: 260, laneRadius: 1, attackSpeedMultiplier: 0.7, color: 0xfbbf24 },
+  plasma_barrier: { cooldown: 12000, duration: 9000, radius: 900, laneRadius: 0, shield: 140, color: 0x22d3ee },
+  plasma_cannon_barrage: { cooldown: 12000, range: 900, splash: 180, damage: 200, allLanes: true, color: 0xe879f9 },
+};
+
+(function applyCardBalanceTiers() {
+  const tiers = [
+    { maxLevel: 3, rarity: 'common', hp: [50, 75] },
+    { maxLevel: 10, rarity: 'uncommon', hp: [100, 150] },
+    { maxLevel: 20, rarity: 'rare', hp: [120, 175] },
+    { maxLevel: 30, rarity: 'very_rare', hp: [200, 220] },
+    { maxLevel: 38, rarity: 'ultra_rare', hp: [250, 275] },
+    { maxLevel: 48, rarity: 'legendary', hp: [300, 500] },
+    { maxLevel: Infinity, rarity: 'mythical', hp: [500, 1000] },
+  ];
+  Object.values(GW.CARDS).forEach(card => {
+    const level = typeof card.unlockLevel === 'number' ? card.unlockLevel : 0;
+    const tier = tiers.find(entry => level <= entry.maxLevel);
+    card.rarity = tier.rarity;
+    const [minHp, maxHp] = tier.hp;
+    if (card.hp < minHp || card.hp > maxHp) {
+      card.hp = minHp + ((Math.imul(level + card.id.length, 37) >>> 0) % (maxHp - minHp + 1));
+    }
+    if (tier.rarity === 'common') card.cost = card.id === 'plasma_energy_generator' ? 50 : 100;
+    else if (tier.rarity === 'uncommon') card.cost = 120;
+    else if (tier.rarity === 'rare') card.cost = 150 + (level % 6) * 10;
+    else if (tier.rarity === 'very_rare') card.cost = 250;
+    else if (tier.rarity === 'ultra_rare') card.cost = 300 + (level % 5) * 50;
+    else if (tier.rarity === 'legendary') card.cost = 500 + (level % 6) * 100;
+    else card.cost = 1000 + (level % 5) * 500;
+  });
+})();
+
 (function validateCardCount() {
   const all = Object.values(GW.CARDS);
   const starting  = all.filter(c => c.unlockLevel === 'start').length;
@@ -1159,17 +1246,17 @@ GW.ENEMIES = {
   },
   vex_colossus: {
     id: 'vex_colossus', name: 'Vex Colossus', class: 'brute', tier: 5,
-    hp: 600, speed: 12, damage: 35, attackCooldown: 1600, reward: 150,
+    hp: 6000, speed: 12, damage: 35, attackCooldown: 1600, reward: 150,
     color: 0x7f1d1d, accentColor: 0xef4444, eyeColor: 0xff0000,
     description: 'Massive alien brute. Enormous health pool.',
     specialAbility: 'stomp', introducedLevel: 25,
   },
   vex_elite: {
     id: 'vex_elite', name: 'Vex Elite', class: 'elite', tier: 5,
-    hp: 200, speed: 34, damage: 28, attackCooldown: 1500, reward: 120,
+    hp: 700, speed: 34, damage: 28, attackCooldown: 1500, reward: 120,
     color: 0x581c87, accentColor: 0xe879f9, eyeColor: 0xff00ff,
-    description: 'Elite commander unit. Fast and dangerous.',
-    specialAbility: 'elite_charge', introducedLevel: 35,
+    description: 'Elite alien armed with advanced laser and cannon technology.',
+    specialAbility: 'elite_charge', introducedLevel: 11,
   },
   vex_overlord: {
     id:            'vex_overlord',
@@ -1220,42 +1307,42 @@ GW.ENEMY_CATEGORIES = {
   // â”€â”€ ADVANCED MOBILE (vehicle/hover-based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vex_tiny_ship: {
     id: 'vex_tiny_ship', name: 'Floating Tiny Ship', class: 'aerial', tier: 4,
-    hp: 80, speed: 24, damage: 12, attackCooldown: 2000, reward: 55,
+    hp: 1200, speed: 24, damage: 12, attackCooldown: 2000, reward: 55,
     color: 0x818cf8, accentColor: 0xc7d2fe, eyeColor: 0x6366f1,
     description: 'Flies over ground-level obstacles. 2Ã— speed. Medium HP.',
-    specialAbility: 'hover', introducedLevel: 22,
+    specialAbility: 'hover', introducedLevel: 11,
     isAerial: true,
   },
   vex_hover_bike: {
     id: 'vex_hover_bike', name: 'Hover Bike Alien', class: 'vehicle', tier: 4,
-    hp: 90, speed: 30, damage: 15, attackCooldown: 1800, reward: 65,
+    hp: 1600, speed: 30, damage: 15, attackCooldown: 1800, reward: 65,
     color: 0x6366f1, accentColor: 0xa5b4fc, eyeColor: 0x818cf8,
     description: 'Mounted on hover bike. 2.5Ã— speed. Bypasses ground traps.',
-    specialAbility: 'hover_speed', introducedLevel: 24,
+    specialAbility: 'hover_speed', introducedLevel: 11,
     isVehicle: true,
   },
   vex_vehicle_rider: {
     id: 'vex_vehicle_rider', name: 'Vehicle Rider', class: 'vehicle', tier: 5,
-    hp: 200, speed: 30, damage: 22, attackCooldown: 1600, reward: 80,
+    hp: 2500, speed: 30, damage: 22, attackCooldown: 1600, reward: 80,
     color: 0x475569, accentColor: 0x94a3b8, eyeColor: 0x60a5fa,
     description: 'Heavy alien vehicle. 2.5Ã— speed, high HP.',
-    specialAbility: 'ram', introducedLevel: 28,
+    specialAbility: 'ram', introducedLevel: 11,
     isVehicle: true,
   },
   vex_jetpack: {
     id: 'vex_jetpack', name: 'Jetpack Alien', class: 'aerial', tier: 5,
-    hp: 70, speed: 36, damage: 18, attackCooldown: 1800, reward: 90,
+    hp: 1200, speed: 36, damage: 18, attackCooldown: 1800, reward: 90,
     color: 0xef4444, accentColor: 0xfca5a5, eyeColor: 0xff0000,
     description: 'Jetpack propulsion. 3Ã— speed, can jump over one defender.',
-    specialAbility: 'jetpack_leap', introducedLevel: 30,
+    specialAbility: 'jetpack_leap', introducedLevel: 11,
     isAerial: true,
   },
   vex_hover_alien: {
     id: 'vex_hover_alien', name: 'Hover Alien', class: 'aerial', tier: 4,
-    hp: 110, speed: 22, damage: 14, attackCooldown: 2000, reward: 60,
+    hp: 1500, speed: 22, damage: 14, attackCooldown: 2000, reward: 60,
     color: 0x7c3aed, accentColor: 0xc4b5fd, eyeColor: 0xe879f9,
     description: 'Levitates above ground. Immune to lane hazards. 1.8Ã— speed.',
-    specialAbility: 'hover', introducedLevel: 20,
+    specialAbility: 'hover', introducedLevel: 11,
     isAerial: true,
   },
 
@@ -1308,6 +1395,13 @@ GW.ENEMY_CATEGORIES = {
     color: 0xd97706, accentColor: 0xfbbf24, eyeColor: 0xff9500,
     description: 'Builds alien barricades and turrets. Tactical support.',
     specialAbility: 'build_barricade', introducedLevel: 28,
+  },
+  vex_advanced: {
+    id: 'vex_advanced', name: 'Vex Advanced Unit', class: 'advanced', tier: 6,
+    hp: 1500, speed: 11, damage: 35, attackCooldown: 1800, reward: 200,
+    color: 0x0f766e, accentColor: 0x5eead4, eyeColor: 0xf0fdfa,
+    description: 'Advanced alien infantry with high-tech armor and precision weapons.',
+    specialAbility: 'advanced_weaponry', introducedLevel: 11,
   },
 };
 
@@ -1410,7 +1504,7 @@ GW.ENVIRONMENTS = {
       // halfHpChain:true â€” WaveManager will spawn the NEXT scout only when the
       // PREVIOUS one reaches half HP, rather than using fixed delay offsets.
       // Lanes are randomised (not staircase) so aliens appear unpredictably.
-      { id: 'scouts', label: 'SCOUTS', halfHpChain: true, enemies: [
+      { id: 'scouts', label: 'SCOUTS', approachInterval: [15000, 20000], enemies: [
         { type: 'vex_drone', lane: 3, delay: 0 },
         { type: 'vex_drone', lane: 1, delay: 0 },
         { type: 'vex_drone', lane: 5, delay: 0 },
@@ -1431,16 +1525,6 @@ GW.ENVIRONMENTS = {
         { type: 'vex_drone', lane: 2, delay: 0 },
         { type: 'vex_drone', lane: 4, delay: 0 },
         { type: 'vex_drone', lane: 5, delay: 0 },
-        { type: 'vex_drone', lane: 2, delay: 0 },
-        { type: 'vex_drone', lane: 4, delay: 0 },
-        { type: 'vex_drone', lane: 1, delay: 0 },
-        { type: 'vex_drone', lane: 5, delay: 0 },
-        { type: 'vex_drone', lane: 3, delay: 0 },
-        { type: 'vex_drone', lane: 2, delay: 0 },
-        { type: 'vex_drone', lane: 1, delay: 0 },
-        { type: 'vex_drone', lane: 4, delay: 0 },
-        { type: 'vex_drone', lane: 5, delay: 0 },
-        { type: 'vex_drone', lane: 3, delay: 0 },
       ]},
       // â”€â”€ Phase 2: The Horde â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // hordeDelay:4000 â€” WaveManager waits 4s after the flag bearer warning
@@ -1579,8 +1663,9 @@ GW.ENVIRONMENTS = {
    * Pool is an array of equipment ids with their spawn weights.
    */
   function equipPoolForLevel(levelId) {
-    if (levelId <= 5)  return [['bare',4],['cap',1]];
-    if (levelId <= 10) return [['bare',3],['cap',2]];
+    if (levelId <= 2)  return [['bare',1]];
+    if (levelId <= 5)  return [['bare',2],['cap',1],['iron_mask',1]];
+    if (levelId <= 10) return [['bare',2],['cap',1],['iron_mask',1],['wooden_shield',1],['bicycle',1],['newspaper',1],['museum_armor',1]];
     if (levelId <= 13) return [['bare',2],['cap',2],['iron_mask',1]];
     if (levelId <= 16) return [['bare',1],['cap',2],['iron_mask',2],['steel_helmet',1]];
     if (levelId <= 20) return [['cap',1],['iron_mask',2],['steel_helmet',2],['armored_vest',1]];
@@ -1627,15 +1712,25 @@ GW.ENVIRONMENTS = {
    * Each scout gets a 12â€“20s individual gap from the previous.
    * Uses deterministic pseudo-random (seed-based) so values are consistent.
    */
-  function scoutDelays(count, seed) {
+  function scoutDelays(count, seed, spawnProfile) {
     const delays = [];
     let acc = 0;
-    for (let i = 0; i < count; i++) {
-      delays.push(acc);
-      // Gap: 12000 + 0-8000 pseudo-random
-      const r = ((seed + i * 7919) * 1664525 + 1013904223) % 2147483648;
-      const gap = 12000 + (r % 8001); // [12000, 20000]
-      acc += gap;
+    for (let i = 0; i < count;) {
+      const groupStart = i;
+      let groupSize = 1;
+      if (spawnProfile && spawnProfile.groupWeights) {
+        const weights = spawnProfile.groupWeights;
+        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+        let roll = Math.random() * totalWeight;
+        groupSize = weights.findIndex(weight => (roll -= weight) < 0) + 1;
+      }
+      for (let member = 0; member < groupSize && i < count; member++, i++) delays.push(acc);
+      if (spawnProfile) {
+        acc += spawnProfile.interval[0] + Math.floor(Math.random() * (spawnProfile.interval[1] - spawnProfile.interval[0] + 1));
+      } else {
+        const r = ((seed + groupStart * 7919) * 1664525 + 1013904223) % 2147483648;
+        acc += 15000 + (r % 5001);
+      }
     }
     return delays;
   }
@@ -1662,13 +1757,29 @@ GW.ENVIRONMENTS = {
   * @param {number} difficulty â€” 0=easy 1=moderate 2=medium 3=hard 4=expert 5=impossible
    * @param {boolean} isBoss
    */
-  function buildLevelWaves(levelId, difficulty, isBoss) {
+  function buildLevelWaves(levelId, difficulty, isBoss, spawnProfile) {
     const pool = equipPoolForLevel(levelId);
     const seed = levelId * 31337;
 
     // Scout count scales with difficulty from Easy through the boss tier.
-    const scoutCounts = [6, 8, 10, 12, 14, 18];
-    const scoutCount = scoutCounts[Math.min(difficulty, 5)];
+    const diff = Math.min(difficulty, 5);
+    const tierRanges = [[1,6],[7,14],[15,23],[24,35],[36,49],[50,50]];
+    const [tierMin, tierMax] = tierRanges[diff] || [1, 50];
+    const approachRanges = [[20, 25], [15, 20], [20, 25], [25, 30], [30, 30], [30, 30]];
+    const [approachMin, approachMax] = approachRanges[diff];
+    const tierProgress = Math.max(0, Math.min(1, (levelId - tierMin) / Math.max(1, tierMax - tierMin)));
+    const scoutCount = Math.round(approachMin + tierProgress * (approachMax - approachMin));
+    const enemyTypeForLevel = (index) => {
+      if (levelId < 11) return 'vex_drone';
+      if (levelId >= 25 && index % 30 === 0) return 'vex_colossus';
+      if (index % 21 === 0) return 'vex_jetpack';
+      if (index % 18 === 0) return 'vex_tiny_ship';
+      if (index % 15 === 0) return 'vex_hover_bike';
+      if (index % 12 === 0) return 'vex_vehicle_rider';
+      if (index % 9 === 0) return 'vex_advanced';
+      if (index % 6 === 0) return 'vex_elite';
+      return 'vex_drone';
+    };
 
     // Base assault size per difficulty tier â€” scales up within each tier by level.
     // Within a 10-level tier, the first level gets the BASE, the last gets BASE+tier_growth.
@@ -1676,25 +1787,20 @@ GW.ENVIRONMENTS = {
     // has ~15, and the scale keeps climbing through all 5 environments.
     const assaultBases  = [5, 8, 12, 18, 24, 32];
     const assaultMaxes  = [15, 18, 22, 26, 30, 42];
-    const diff          = Math.min(difficulty, 5);
     // Position within this difficulty tier (0.0 = first level, 1.0 = last level)
     // Use the configured global campaign bands to interpolate within each tier.
-    const tierRanges = [[1,6],[7,14],[15,23],[24,35],[36,49],[50,50]];
-    const [tierMin, tierMax] = tierRanges[diff] || [1, 50];
-    const tierPct = Math.max(0, Math.min(1, (levelId - tierMin) / Math.max(1, tierMax - tierMin)));
-    const assaultSize = Math.round(assaultBases[diff] + tierPct * (assaultMaxes[diff] - assaultBases[diff]));
 
     // Number of full assault waves: 1 easy, 2 medium, 3+ hard
-    const waveCounts = [1, 2, 2, 3, 4, 5];
+    const waveCounts = [1, 2, 3, 4, 5, 5];
     const numWaves = waveCounts[diff];
 
     const waves = [];
 
     // â”€â”€ Pre-wave scouts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    const preDelays = scoutDelays(scoutCount, seed);
+    const preDelays = scoutDelays(scoutCount, seed, spawnProfile);
     const preEnemies = preDelays.map(function(delay, i) {
       return {
-        type:      'vex_drone',
+        type:      enemyTypeForLevel(i),
         lane:      pickLane(seed + i),
         delay:     delay,
         equipment: pickEquip(pool, seed + i * 1000),
@@ -1706,40 +1812,40 @@ GW.ENVIRONMENTS = {
     for (let w = 0; w < numWaves; w++) {
       const isFinal  = w === numWaves - 1;
       const waveSeed = seed + (w + 1) * 99991;
-      const baseWaveSize = isFinal && difficulty >= 2 ? assaultSize + 5 : assaultSize;
-      const isHorde = isFinal && baseWaveSize >= 20;
-      const waveSize = isHorde ? Math.min(30, Math.max(20, baseWaveSize)) : baseWaveSize;
-      const delays   = assaultDelays(waveSize, waveSeed);
-
-      // Pick enemy type â€” last 2-3 slots get flag bearers on final/penultimate waves
-      const enemies = delays.map(function(delay, i) {
-        const isFlag = (isFinal || w === numWaves - 2) && i >= waveSize - 2;
+      const waveSize = diff >= 4 ? 25 + ((levelId + w) % 11) : 20 + ((levelId + w) % 11);
+      const flagCount = diff >= 4 && isFinal ? 2 : 1;
+      const enemies = Array.from({ length: waveSize }, function(_, i) {
         return {
-          type:      isFlag ? 'vex_flag_bearer' : 'vex_drone',
+          type:      enemyTypeForLevel(i + w),
           lane:      pickLane(waveSeed + i),
-          delay:     delay,
-          equipment: isFlag ? 'bare' : pickEquip(pool, waveSeed + i * 777),
+          delay:     0,
+          equipment: pickEquip(pool, waveSeed + i * 777),
         };
       });
+      for (let i = 0; i < flagCount; i++) {
+        enemies.push({ type: 'vex_flag_bearer', lane: pickLane(waveSeed + waveSize + i), delay: 0, equipment: 'bare' });
+      }
 
       waves.push({
         id:          isFinal ? 'wave_final' : 'wave_' + (w + 1),
         label:       isFinal ? 'FINAL WAVE' : (w === 0 ? 'FIRST WAVE' : 'WAVE ' + (w + 1)),
         isMajorWave: true,
         isFinalWave: isFinal,
-        isHorde:     isHorde,
-        warningDelay: isHorde ? 3000 : undefined,
+        isHorde:     true,
+        warningDelay: 3000,
+        spawnGroupWeights: spawnProfile && spawnProfile.groupWeights,
+        spawnInterval: spawnProfile && spawnProfile.interval,
         enemies:     enemies,
       });
 
       // Between waves: add a pressure scout phase (except after final)
       if (!isFinal) {
         const pressSeed   = seed + (w + 1) * 55557;
-        const pressCount  = Math.max(3, scoutCount - 2);
-        const pressDelays = scoutDelays(pressCount, pressSeed);
+        const pressCount  = Math.max(5, Math.floor(scoutCount / 2));
+        const pressDelays = scoutDelays(pressCount, pressSeed, spawnProfile);
         const pressEnemies = pressDelays.map(function(delay, i) {
           return {
-            type:      'vex_drone',
+            type:      enemyTypeForLevel(i + pressSeed),
             lane:      pickLane(pressSeed + i),
             delay:     delay,
             equipment: pickEquip(pool, pressSeed + i * 1337),
@@ -1751,15 +1857,19 @@ GW.ENVIRONMENTS = {
 
     // â”€â”€ Boss wave (level 50 only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (isBoss) {
-      const bossDelays = assaultDelays(10, seed + 888888);
+      const bossDelays = spawnProfile
+        ? scoutDelays(10, seed + 888888, spawnProfile)
+        : assaultDelays(10, seed + 888888);
       waves.push({
         id: 'wave_boss', label: 'OVERLORD APPROACHES', isMajorWave: true, isBossWave: true,
+        spawnGroupWeights: spawnProfile && spawnProfile.groupWeights,
+        spawnInterval: spawnProfile && spawnProfile.interval,
         enemies: bossDelays.map(function(delay, i) {
           return {
             type:      i === 9 ? 'vex_overlord' : 'vex_elite',
             lane:      pickLane(seed + 888888 + i),
             delay:     delay,
-            equipment: 'tactical_armor',
+            equipment: i === 9 ? 'bare' : 'tactical_armor',
           };
         }),
       });
@@ -1770,6 +1880,7 @@ GW.ENVIRONMENTS = {
 
   // â”€â”€ Difficulty mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const diffMap = { easy: 0, moderate: 1, medium: 2, hard: 3, expert: 4, impossible: 5, extreme: 5 };
+  const nonAdventureSpawnProfile = { groupWeights: [75, 25, 15], interval: [20000, 20000] };
 
   // â”€â”€ Assign waves to ALL levels 2-50 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (let id = 2; id <= 50; id++) {
@@ -1777,10 +1888,10 @@ GW.ENVIRONMENTS = {
     const diff = diffMap[L[id].difficulty] ?? 0;
     L[id].waves = buildLevelWaves(id, diff, !!L[id].isBossLevel);
     // Update available enemies pool based on level tier
-    if (id >= 41) L[id].availableEnemies = ['vex_drone','vex_elite','vex_colossus','vex_overlord'];
-    else if (id >= 31) L[id].availableEnemies = ['vex_drone','vex_bruiser','vex_elite'];
-    else if (id >= 21) L[id].availableEnemies = ['vex_drone','vex_bruiser','vex_leaper','vex_warden'];
-    else if (id >= 11) L[id].availableEnemies = ['vex_drone','vex_runner','vex_leaper','vex_sniper'];
+    if (id >= 41) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike','vex_vehicle_rider','vex_colossus','vex_overlord'];
+    else if (id >= 31) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_jetpack','vex_vehicle_rider','vex_colossus'];
+    else if (id >= 21) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike','vex_vehicle_rider','vex_colossus'];
+    else if (id >= 11) L[id].availableEnemies = ['vex_drone','vex_runner','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike'];
     else               L[id].availableEnemies = ['vex_drone','vex_runner'];
   }
 
@@ -1795,7 +1906,7 @@ GW.ENVIRONMENTS = {
     GW.SURVIVAL_MODES.forEach(function(mode, idx) {
       const diff = survivalDiffByEnv[mode.env] || 2;
       // Use a high fake levelId (100+) so pool gives hard alien types
-      GW.SURVIVAL_WAVE_SETS[mode.id] = buildLevelWaves(30 + idx * 5, diff, false);
+      GW.SURVIVAL_WAVE_SETS[mode.id] = buildLevelWaves(30 + idx * 5, diff, false, nonAdventureSpawnProfile);
     });
   }
 
@@ -1804,7 +1915,7 @@ GW.ENVIRONMENTS = {
   if (typeof GW.MINIGAMES !== 'undefined') {
     GW.MINIGAMES.forEach(function(mg, idx) {
       // Mini-games: medium difficulty, shorter waves
-      GW.MINIGAME_WAVE_SETS[mg.id] = buildLevelWaves(10 + idx * 2, 1, false);
+      GW.MINIGAME_WAVE_SETS[mg.id] = buildLevelWaves(10 + idx * 2, 1, false, nonAdventureSpawnProfile);
     });
   }
 
@@ -1813,13 +1924,15 @@ GW.ENVIRONMENTS = {
   if (typeof GW.PUZZLES !== 'undefined') {
     GW.PUZZLES.forEach(function(pz, idx) {
       // Puzzles: fixed small wave, easy-medium
-      GW.PUZZLE_WAVE_SETS[pz.id] = buildLevelWaves(5 + idx, Math.min(1, idx % 2), false);
+      GW.PUZZLE_WAVE_SETS[pz.id] = buildLevelWaves(5 + idx, Math.min(1, idx % 2), false, nonAdventureSpawnProfile);
     });
   }
 
   // â”€â”€ Endless mode base wave set â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Endless starts at medium and scales; base template for wave 1
-  GW.ENDLESS_BASE_WAVES = buildLevelWaves(15, 1, false);
+  GW.ENDLESS_BASE_WAVES = buildLevelWaves(15, 1, false, nonAdventureSpawnProfile);
+  GW.buildLevelWaves = buildLevelWaves;
+  GW.NON_ADVENTURE_SPAWN_PROFILE = nonAdventureSpawnProfile;
 
   GW.LEVELS = L;
 })();
@@ -1881,6 +1994,33 @@ GW.SURVIVAL_MODES = [
   { id:'sv_boss_rush', name:'Boss Rush',     icon:'ðŸ‘¹', unlocked:false, env:'spaceship',   description:'Consecutive boss-class enemies.' },
   { id:'sv_last_stand',name:'Last Stand',    icon:'ðŸ›¡', unlocked:false, env:'rainy_stormy',description:'All lanes assault simultaneously.' },
 ];
+
+GW.SURVIVAL_WAVE_SETS = {};
+const _survivalDifficultyByEnv = {
+  daytime: 1, nighttime: 2, foggy: 2, rainy_stormy: 3, radioactive: 3,
+};
+GW.SURVIVAL_MODES.forEach((mode, index) => {
+  GW.SURVIVAL_WAVE_SETS[mode.id] = GW.buildLevelWaves(
+    30 + index * 5,
+    _survivalDifficultyByEnv[mode.env] || 2,
+    false,
+    GW.NON_ADVENTURE_SPAWN_PROFILE
+  );
+});
+
+GW.MINIGAME_WAVE_SETS = {};
+GW.MINIGAMES.forEach((mode, index) => {
+  GW.MINIGAME_WAVE_SETS[mode.id] = GW.buildLevelWaves(
+    10 + index * 2, 1, false, GW.NON_ADVENTURE_SPAWN_PROFILE
+  );
+});
+
+GW.PUZZLE_WAVE_SETS = {};
+GW.PUZZLES.forEach((puzzle, index) => {
+  GW.PUZZLE_WAVE_SETS[puzzle.id] = GW.buildLevelWaves(
+    5 + index, Math.min(1, index % 2), false, GW.NON_ADVENTURE_SPAWN_PROFILE
+  );
+});
 
 GW.ENDLESS = {
   id: 'endless', name: 'Endless Survival',

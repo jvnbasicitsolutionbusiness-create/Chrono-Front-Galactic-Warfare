@@ -297,7 +297,7 @@ GW.UIManager = class UIManager {
     g.clear();
     if (!def) return;
 
-    if (def.role === 'energy' || def.isSupport) {
+    if (def.role === 'energy' || def.isEnergyGenerator) {
       // ── PE Generator card tray icon ──────────────────────────────────────
       // Mini version of the blue tower: 3-leg base, cylindrical body, glowing orb
       // Base platform (dark navy + amber trim)
@@ -349,6 +349,20 @@ GW.UIManager = class UIManager {
       g.lineStyle(1, 0x78350f, 1);
       g.beginPath(); g.moveTo(9, -12); g.lineTo(11, -16); g.strokePath();
       g.fillStyle(0xfbbf24, 1); g.fillCircle(11, -17, 1.5);
+    } else if (def.isSupport && !def.weapon) {
+      const ability = def.specialAbility;
+      const color = def.accentColor || 0x67e8f9;
+      if (['heal_nearby', 'rapid_repair', 'neutralize_radiation'].includes(ability)) {
+        g.fillStyle(color, 0.9); g.fillRoundedRect(-7, -10, 14, 22, 3);
+        g.fillStyle(0xf8fafc, 1); g.fillRect(-2, -6, 4, 14); g.fillRect(-7, -1, 14, 4);
+      } else if (['energy_shield', 'plasma_barrier', 'multi_buff'].includes(ability)) {
+        g.fillStyle(color, 0.9); g.fillTriangle(0, -13, 11, -8, 9, 7); g.fillTriangle(9, 7, 0, 12, -9, 7);
+        g.lineStyle(1.5, 0xffffff, 0.8); g.strokeTriangle(0, -13, 11, -8, 9, 7);
+      } else {
+        g.lineStyle(2, color, 0.95); g.strokeCircle(0, 0, 10);
+        g.lineBetween(-14, 0, 14, 0); g.lineBetween(0, -14, 0, 14);
+        g.fillStyle(color, 1); g.fillCircle(0, 0, 3);
+      }
     } else if (def.id === 'fire_lancer') {
       // ── Fire-Lancer card icon ──────────────────────────────────────
       // Miniature version of the sprite: dark maroon uniform, red plume helmet,

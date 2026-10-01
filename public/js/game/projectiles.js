@@ -18,7 +18,7 @@ GW.Projectile = class Projectile {
    * @param {number}  color    - hex color for the projectile
    * @param {number}  size     - radius of core circle
    */
-  constructor(scene, x, y, target, damage, speed, color, size) {
+  constructor(scene, x, y, target, damage, speed, color, size, weaponDef) {
     this.scene   = scene;
     this.x       = x;
     this.y       = y;
@@ -27,6 +27,8 @@ GW.Projectile = class Projectile {
     this.speed   = speed || GW.COMBAT.PROJECTILE_SPEED;
     this.color   = color || 0xfde68a;
     this.size    = size  || 5;
+    this.weaponDef = weaponDef || {};
+    this.originX = x;
     this.active  = true;
 
     this._build();
@@ -39,15 +41,21 @@ GW.Projectile = class Projectile {
 
   _draw() {
     this.gfx.clear();
-    // Outer glow
+    const type = this.weaponDef.projectileType;
     this.gfx.fillStyle(this.color, 0.25);
     this.gfx.fillCircle(0, 0, this.size + 5);
-    // Core
     this.gfx.fillStyle(this.color, 1);
-    this.gfx.fillCircle(0, 0, this.size);
-    // Highlight
-    this.gfx.fillStyle(0xffffff, 0.55);
-    this.gfx.fillCircle(-Math.floor(this.size * 0.4), -Math.floor(this.size * 0.4), Math.max(1.5, this.size * 0.4));
+    if (type === 'laser') {
+      this.gfx.lineStyle(Math.max(2, this.size), this.color, 1);
+      this.gfx.lineBetween(-12, 0, 12, 0);
+    } else if (['rocket', 'torpedo', 'explosive', 'gas', 'plasma', 'plasma_cannon', 'cannonball'].includes(type)) {
+      this.gfx.fillRoundedRect(-this.size, -this.size * 0.55, this.size * 2.2, this.size * 1.1, 2);
+      this.gfx.fillTriangle(this.size * 1.5, 0, this.size * 0.8, -this.size * 0.8, this.size * 0.8, this.size * 0.8);
+    } else {
+      this.gfx.fillCircle(0, 0, this.size);
+      this.gfx.fillStyle(0xffffff, 0.55);
+      this.gfx.fillCircle(-Math.floor(this.size * 0.4), -Math.floor(this.size * 0.4), Math.max(1.5, this.size * 0.4));
+    }
     this.gfx.x = this.x;
     this.gfx.y = this.y;
   }
@@ -70,6 +78,7 @@ GW.Projectile = class Projectile {
     if (dist <= step + this.size + 4) {
       // Hit!
       this.target.takeDamage(this.damage);
+      this._applyWeaponEffects(tx, ty);
       this._spawnHitEffect(tx, ty);
       this.destroy();
       return true;
@@ -85,6 +94,30 @@ GW.Projectile = class Projectile {
       return true;
     }
     return false;
+  }
+
+  _applyWeaponEffects(hitX, hitY) {
+    const enemies = this.scene.combatManager && this.scene.combatManager.enemies || [];
+    const alreadyHit = new Set([this.target]);
+    const weapon = this.weaponDef;
+    if (weapon.piercing) {
+      enemies.forEach(enemy => {
+        if (!enemy.alive || enemy.lane !== this.target.lane || alreadyHit.has(enemy)) return;
+        if (enemy.x >= Math.min(this.originX, hitX) && enemy.x <= Math.max(this.originX, hitX)) {
+          enemy.takeDamage(this.damage);
+          alreadyHit.add(enemy);
+        }
+      });
+    }
+    if (weapon.splash) {
+      enemies.forEach(enemy => {
+        if (!enemy.alive || alreadyHit.has(enemy)) return;
+        if (Math.hypot(enemy.x - hitX, enemy.y - hitY) <= weapon.splash) {
+          enemy.takeDamage(this.damage);
+          alreadyHit.add(enemy);
+        }
+      });
+    }
   }
 
   _spawnHitEffect(x, y) {
@@ -125,14 +158,14 @@ GW.ProjectileManager = class ProjectileManager {
    * @param {number}   [size]   - radius (from weapon def)
    * @param {string}   [type]   - 'fire' uses GW.FireProjectile; others use default
    */
-  fire(x, y, target, damage, color, size, type) {
+  fire(x, y, target, damage, color, size, type, speed, weaponDef) {
     let p;
     if (type === 'fire') {
       p = new GW.FireProjectile(this.scene, x, y, target, damage);
     } else {
       p = new GW.Projectile(
         this.scene, x, y, target, damage,
-        GW.COMBAT.PROJECTILE_SPEED, color, size
+        speed || GW.COMBAT.PROJECTILE_SPEED, color, size, weaponDef
       );
     }
     this.projectiles.push(p);

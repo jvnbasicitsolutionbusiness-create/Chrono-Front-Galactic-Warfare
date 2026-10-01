@@ -29,7 +29,8 @@ GW.Character = class Character {
     this.target = null;
 
     // Combat stats from weapon def OR card def
-    const isEnergyUnit = def.isSupport || def.role === 'energy';
+    const isEnergyUnit = def.role === 'energy' || def.isEnergyGenerator;
+    this.isEnergyUnit = isEnergyUnit;
 
     if (isEnergyUnit) {
       this.damage      = 0;
@@ -44,13 +45,26 @@ GW.Character = class Character {
       this.genTimer    = this.genInterval;  // start at full interval — no instant generation
     } else {
       const wpn = (def.weapon && GW.WEAPONS) ? GW.WEAPONS[def.weapon] : null;
-      this.damage      = (wpn && wpn.damage)           || def.damage      || 10;
-      this.attackSpeed = (wpn && wpn.attackSpeed)      || def.attackSpeed || 2800;
-      this.range       = (wpn && wpn.range)            || def.range       || 280;
+      this.damage      = def.damage      == null ? ((wpn && wpn.damage) || 10) : def.damage;
+      this.attackSpeed = def.attackSpeed || (wpn && wpn.attackSpeed) || 2800;
+      this.range       = def.range       || (wpn && wpn.range) || 280;
       this.projColor   = (wpn && wpn.projectileColor)  || 0xff6b00;
       this.projSize    = (wpn && wpn.projectileSize)   || 5;
-      this.isSupport   = false;
+      this.projectileSpeed = def.projectileSpeed || (wpn && wpn.projectileSpeed) || GW.COMBAT.PROJECTILE_SPEED;
+      this.isSupport   = !!def.isSupport && !def.weapon;
     }
+    this._baseAttackSpeed = this.attackSpeed;
+    this.attackSpeedMultiplier = 1;
+    this.attackSpeedBuffTimer = 0;
+    this.shieldHp = 0;
+    this.shieldTimer = 0;
+    this.genRateMultiplier = 1;
+    this.genBoostTimer = 0;
+    this.isStealthed = false;
+    this.stealthTimer = 0;
+    this.abilityRule = GW.CARD_ABILITY_RULES && GW.CARD_ABILITY_RULES[def.specialAbility];
+    this.abilityTimer = this.abilityRule ? Math.min(1500, this.abilityRule.cooldown) : 0;
+    this.bombFuseTimer = def.isSuicideUnit ? (def.fuseDuration || 2500) : 0;
 
     this._prefireCuePlayed = false;
     this.attackTimer = def.weapon === 'fire_lance' ? 500 : 0;
@@ -60,11 +74,23 @@ GW.Character = class Character {
     this.onGenerateEnergy = null;
 
     this._build();
-    if (this.container) this.container.setScale(this.isSupport ? 0.7 : 0.76);
+    if (this.container) this.container.setScale(this.isEnergyUnit ? 0.7 : 0.76);
   }
 
   _build() {
     this.container = this.scene.add.container(this.x, this.y).setDepth(10);
+
+    if (this.def.isSuicideUnit) {
+      const warning = this.scene.add.graphics();
+      warning.lineStyle(2, 0xef4444, 0.9);
+      warning.strokeCircle(0, -8, 30);
+      warning.setAlpha(0.35);
+      this.container.add(warning);
+      this.scene.tweens.add({
+        targets: warning, alpha: 0.95, scaleX: 1.2, scaleY: 1.2,
+        duration: 400, yoyo: true, repeat: 5,
+      });
+    }
 
     const g = this.scene.add.graphics();
     this.graphics = g;
@@ -108,7 +134,7 @@ GW.Character = class Character {
   _drawFallback(g) {
     g.clear();
     const c = this.def.color || 0x4d7c0f;
-    if (this.isSupport) {
+    if (this.isEnergyUnit) {
       // Generator device
       g.fillStyle(c, 0.9); g.fillRoundedRect(-7, -18, 14, 32, 3);
       g.fillStyle(this.def.accentColor || 0xfef3c7, 0.8); g.fillCircle(0, -22, 8);
@@ -131,6 +157,19 @@ GW.Character = class Character {
       // Spark at fuse tip
       g.fillStyle(0xfbbf24, 1); g.fillCircle(17, -27, 2.5);
       g.fillStyle(0xef4444, 0.8); g.fillCircle(17, -27, 1.5);
+    } else if (this.isSupport) {
+      g.fillStyle(c, 1); g.fillRoundedRect(-12, -12, 24, 22, 3);
+      g.fillStyle(this.def.skinColor || 0xd4956a, 1); g.fillRoundedRect(-8, -24, 16, 14, 4);
+      g.fillStyle(this.def.helmetColor || 0x3d2008, 1); g.fillRoundedRect(-9, -28, 18, 10, 4);
+      if (['heal_nearby', 'rapid_repair', 'neutralize_radiation'].includes(this.def.specialAbility)) {
+        g.fillStyle(0xf8fafc, 1); g.fillRect(-2, -9, 5, 13); g.fillRect(-6, -5, 13, 5);
+      } else if (['energy_shield', 'plasma_barrier', 'multi_buff'].includes(this.def.specialAbility)) {
+        g.fillStyle(this.def.accentColor || 0x38bdf8, 0.9);
+        g.fillTriangle(16, -17, 27, -12, 24, 2); g.fillTriangle(24, 2, 16, 7, 13, -12);
+      } else {
+        g.lineStyle(2, this.def.accentColor || 0x67e8f9, 0.9);
+        g.strokeCircle(20, -5, 8); g.lineBetween(12, -5, 28, -5); g.lineBetween(20, -13, 20, 3);
+      }
     } else {
       // Soldier — generic soldier with gun
       g.fillStyle(this.def.skinColor || 0xd4956a, 1); g.fillRoundedRect(-8, -24, 16, 14, 4);
@@ -148,14 +187,25 @@ GW.Character = class Character {
     this.hpBar.fillRect(-20, -52, 40 * ratio, 5);
   }
 
-  update(delta, enemies) {
+  update(delta, enemies, characters) {
     if (!this.alive) return null;
 
-    if (this.isSupport) {
+    if (this.def.isSuicideUnit) {
+      this.bombFuseTimer -= delta;
+      return this.bombFuseTimer <= 0
+        ? { explode: true, damage: this.def.damage, range: this.def.range, lane: this.lane }
+        : null;
+    }
+
+      this._updateTemporaryEffects(delta);
+      this._updateCardAbility(delta, enemies, characters || []);
+
+      if (this.isEnergyUnit) {
       // v1.0.1: 15–20 s interval from config (was 10–12 s).
       // The timer counts DOWN; when it hits zero we begin the charge phase.
-      const genMin = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 15000;
-      const genMax = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 20000;
+      const genMultiplier = this.genRateMultiplier || 1;
+      const genMin = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 15000) / genMultiplier;
+      const genMax = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 20000) / genMultiplier;
 
       this.genTimer -= delta;
 
@@ -237,6 +287,8 @@ GW.Character = class Character {
       return null;
     }
 
+    if (this.isSupport) return null;
+
     // Combat unit
     this.target = this._findTarget(enemies);
 
@@ -270,11 +322,145 @@ GW.Character = class Character {
     return null;
   }
 
+  _updateTemporaryEffects(delta) {
+    if (this.attackSpeedBuffTimer > 0 && (this.attackSpeedBuffTimer -= delta) <= 0) {
+      this.attackSpeedMultiplier = 1;
+      this.attackSpeed = this._baseAttackSpeed;
+    }
+    if (this.shieldTimer > 0 && (this.shieldTimer -= delta) <= 0) {
+      this.shieldHp = 0;
+      if (this.shieldGfx) this.shieldGfx.setVisible(false);
+    }
+    if (this.genBoostTimer > 0 && (this.genBoostTimer -= delta) <= 0) this.genRateMultiplier = 1;
+    if (this.stealthTimer > 0 && (this.stealthTimer -= delta) <= 0) {
+      this.isStealthed = false;
+      if (this.container) this.container.setAlpha(1);
+    }
+  }
+
+  _updateCardAbility(delta, enemies, characters) {
+    const rule = this.abilityRule;
+    if (!rule) return;
+    this.abilityTimer -= delta;
+    if (this.abilityTimer > 0) return;
+    const activated = this._activateCardAbility(rule, enemies, characters);
+    this.abilityTimer = activated ? rule.cooldown : 500;
+  }
+
+  _activateCardAbility(rule, enemies, characters) {
+    const allies = [...new Set(characters.concat(this))].filter(ally => {
+      if (!ally.alive) return false;
+      const withinLane = Math.abs(ally.lane - this.lane) <= (rule.laneRadius == null ? 1 : rule.laneRadius);
+      const withinRange = Math.abs(ally.x - this.x) <= (rule.radius == null ? 260 : rule.radius);
+      return withinLane && withinRange;
+    });
+    let activated = false;
+
+    if (rule.self) {
+      this.isStealthed = true;
+      this.stealthTimer = Math.max(this.stealthTimer, rule.duration || 4000);
+      if (this.container) this.container.setAlpha(0.45);
+      activated = true;
+    }
+    if (rule.reveal) {
+      enemies.forEach(enemy => {
+        if (!enemy.alive) return;
+        if (enemy.revealFor) enemy.revealFor(rule.duration || 8000);
+        else enemy.revealed = true;
+        activated = true;
+      });
+    }
+    if (rule.heal) {
+      allies.forEach(ally => { if (ally.heal(rule.heal)) activated = true; });
+    }
+    if (rule.shield) {
+      allies.forEach(ally => {
+        ally.applyShield(rule.shield, rule.duration || 6000);
+        activated = true;
+      });
+    }
+    if (rule.attackSpeedMultiplier) {
+      allies.forEach(ally => {
+        ally.applyAttackSpeedBoost(rule.attackSpeedMultiplier, rule.duration || 6000);
+        activated = true;
+      });
+    }
+    if (rule.regenMultiplier) {
+      allies.filter(ally => ally.isEnergyUnit).forEach(ally => {
+        ally.genRateMultiplier = Math.max(ally.genRateMultiplier, rule.regenMultiplier);
+        ally.genBoostTimer = Math.max(ally.genBoostTimer, rule.duration || 7000);
+        ally.genTimer = Math.min(ally.genTimer, ally.genInterval / ally.genRateMultiplier);
+        activated = true;
+      });
+    }
+
+    if (rule.damage || rule.slowMultiplier) {
+      const range = rule.range || 600;
+      const target = enemies.filter(enemy => enemy.alive && enemy.x >= this.x && enemy.x - this.x <= range)
+        .sort((left, right) => left.x - right.x)[0];
+      if (target) {
+        const radius = rule.splash || 0;
+        enemies.forEach(enemy => {
+          if (!enemy.alive) return;
+          const laneDistance = Math.abs(enemy.lane - target.lane) * (GW.BOARD.LANE_HEIGHT || 76);
+          if (Math.hypot(enemy.x - target.x, laneDistance) > radius && enemy !== target) return;
+          if (rule.damage) enemy.takeDamage(rule.damage);
+          if (rule.slowMultiplier && enemy.applySlow) enemy.applySlow(rule.slowMultiplier, rule.duration || 5000);
+        });
+        this._showAbilityPulse(rule.color || 0xfbbf24, Math.max(28, radius), target.x, target.y);
+        activated = true;
+      }
+    } else if (activated) {
+      this._showAbilityPulse(rule.color || 0x4ade80, Math.max(36, rule.radius || 60));
+    }
+
+    return activated;
+  }
+
+  _showAbilityPulse(color, radius, x, y) {
+    if (!this.scene || !this.scene.add || !this.scene.tweens) return;
+    const pulse = this.scene.add.graphics().setDepth(24);
+    pulse.lineStyle(3, color, 0.9);
+    pulse.strokeCircle(0, 0, radius);
+    pulse.x = x == null ? this.x : x;
+    pulse.y = y == null ? this.y : y;
+    this.scene.tweens.add({
+      targets: pulse, scaleX: 1.5, scaleY: 1.5, alpha: 0,
+      duration: 420, ease: 'Power2', onComplete: () => pulse.destroy(),
+    });
+  }
+
+  applyAttackSpeedBoost(multiplier, duration) {
+    this.attackSpeedMultiplier = Math.min(this.attackSpeedMultiplier, multiplier);
+    this.attackSpeedBuffTimer = Math.max(this.attackSpeedBuffTimer, duration);
+    this.attackSpeed = this._baseAttackSpeed * this.attackSpeedMultiplier;
+  }
+
+  applyShield(amount, duration) {
+    this.shieldHp = Math.max(this.shieldHp, amount);
+    this.shieldTimer = Math.max(this.shieldTimer, duration);
+    if (!this.shieldGfx && this.scene && this.container) {
+      this.shieldGfx = this.scene.add.graphics();
+      this.shieldGfx.lineStyle(2, 0x38bdf8, 0.9);
+      this.shieldGfx.strokeCircle(0, -4, 30);
+      this.container.add(this.shieldGfx);
+    }
+    if (this.shieldGfx) this.shieldGfx.setVisible(true);
+  }
+
+  heal(amount) {
+    if (!this.alive || this.hp >= this.maxHp) return false;
+    const previousHp = this.hp;
+    this.hp = Math.min(this.maxHp, this.hp + amount);
+    this._updateHpBar();
+    return this.hp > previousHp;
+  }
+
   _findTarget(enemies) {
     let closest = null;
     let closestDist = Infinity;
     for (const en of enemies) {
-      if (!en.alive) continue;
+      if (!en.alive || (en.isStealth && !en.revealed)) continue;
       if (en.lane !== this.lane) continue;
       const dist = en.x - this.x;
       // v1.0.1: ranged units (range > 0) may target enemies anywhere to the right
@@ -290,6 +476,16 @@ GW.Character = class Character {
 
   takeDamage(amount) {
     if (!this.alive) return;
+    if (this.shieldHp > 0) {
+      const absorbed = Math.min(this.shieldHp, amount);
+      this.shieldHp -= absorbed;
+      amount -= absorbed;
+      if (this.shieldHp <= 0) {
+        this.shieldTimer = 0;
+        if (this.shieldGfx) this.shieldGfx.setVisible(false);
+      }
+      if (amount <= 0) return;
+    }
     this.hp -= amount;
     this._updateHpBar();
     if (this.animator) {
