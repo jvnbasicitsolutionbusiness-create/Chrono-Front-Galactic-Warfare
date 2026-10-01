@@ -1,12 +1,14 @@
-﻿# Music
+﻿# Original Music Tracks
 
-Place background music files here.
+These loopable WAV files are generated from original compositions in `tools/generate-original-music.js`. They use no samples, recordings, or third-party music.
 
-Required files:
-- battle-theme.ogg / battle-theme.mp3 (loop, main gameplay)
-- menu-theme.ogg / menu-theme.mp3 (loop, main menu)
-- victory.ogg / victory.mp3 (one-shot, level complete)
-- defeat.ogg / defeat.mp3 (one-shot, game over)
-- briefing.ogg / briefing.mp3 (loop, mission briefing)
+- `loading-screen.wav` — loading screens
+- `authentication.wav` — login and registration
+- `main-menu.wav` — main menu
+- `battle-daytime.wav` — daytime levels
+- `battle-nighttime.wav` — nighttime levels
+- `battle-foggy.wav` — foggy levels
+- `battle-storm.wav` — rainy and stormy levels
+- `battle-radioactive.wav` — radioactive levels
 
-Format: OGG (primary) + MP3 (fallback) for cross-browser support
+Regenerate the tracks from the project root with `node tools/generate-original-music.js`. Files are stereo PCM WAV for broad browser support; the game loads only the current scene's track.
