@@ -97,3 +97,7 @@ All game content is original. No assets from Plants vs. Zombies or any commercia
 The prototype uses procedurally drawn Phaser Graphics as character placeholders.
 Sprite sheets can be added by updating GW.ASSETS in config.js and loading in BootScene.preload().
 This is Part 1 of a larger development process.
+
+## Audio
+
+Original loopable background tracks and individual interaction cues are stored as PCM WAV files in `public/assets/audio/music/` and `public/assets/audio/sfx/`. They can all be regenerated with `node tools/generate-original-music.js`; no third-party recordings or samples are used. Browsers require a player interaction before audio can play, so use the loading-screen sound control or interact with the page to enable it.

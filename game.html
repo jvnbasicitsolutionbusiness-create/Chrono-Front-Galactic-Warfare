@@ -2,9 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#1a3a0a" />
-  <title>Chrono-Front: Galactic War</title>
+  <meta name="description" content="Galactic Warfare: Defense for Planet Earth — Defend Earth against alien invasion." />
+  <title>Galactic Warfare: Defense for Planet Earth</title>
+
+  <!-- Adaptive network runtime — must load before the auth guard -->
+  <script src="public/js/runtime.js"></script>
 
   <!-- ── Auth Guard ──────────────────────────────────────────
        Same logic as index.html — must run before game scripts.
@@ -16,36 +20,35 @@
     var TOKEN_KEY2 = 'gw_id_token';
     var AUTH_PAGE  = 'auth.html';
     var token = localStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY2);
-    if (!token) {
+    var mode = sessionStorage.getItem('gw_mode');
+    var authorized = sessionStorage.getItem('gw_entry_authorized') === '1';
+    if (!authorized || (mode !== 'guest' && !token)) {
       window.location.replace(AUTH_PAGE);
       throw new Error('[Auth Guard] No session — redirecting to ' + AUTH_PAGE);
     }
-    // Background verify (non-blocking — game loading must not stall)
+    if (mode === 'guest') return;
+    // Background verify — non-blocking, adapts to backend OR direct mode.
     setTimeout(function () {
-      var apiBase = (window.location.port === '3000' || window.location.protocol === 'https:')
-        ? '' : 'http://localhost:3000';
-      fetch(apiBase + '/api/auth/verify', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ token: token }),
-      })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (!d.ok) {
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(TOKEN_KEY2);
-          localStorage.removeItem('gw_user');
-        }
-      })
-      .catch(function () {});
+      if (!window.GWNet) return;
+      window.GWNet.verify(token)
+        .then(function (d) {
+          if (!d || !d.ok) {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(TOKEN_KEY2);
+            localStorage.removeItem('gw_user');
+            sessionStorage.removeItem('gw_entry_authorized');
+            sessionStorage.removeItem('gw_mode');
+            window.location.replace(AUTH_PAGE);
+          }
+        })
+        .catch(function () {});
     }, 1200);
   })();
   </script>
 
-  <!-- CSS Stylesheets -->
- <link rel="stylesheet" href="./public/css/main.css" />
-<link rel="stylesheet" href="./public/css/game.css" />
-<link rel="stylesheet" href="./public/css/briefing.css" />
+  <link rel="stylesheet" href="public/css/main.css" />
+  <link rel="stylesheet" href="public/css/game.css" />
+  <link rel="stylesheet" href="public/css/briefing.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet" />
@@ -54,14 +57,21 @@
 
   <div id="game-container" role="main" aria-label="Game battlefield"></div>
 
+  <div id="orientation-prompt" role="status" aria-live="polite">
+    <div class="orientation-prompt__icon" aria-hidden="true">↻</div>
+    <h1>ROTATE TO LANDSCAPE</h1>
+    <p>Turn your phone or tablet sideways to deploy on the full battlefield.</p>
+  </div>
+
   <!-- Loading screen -->
   <div id="load-screen" aria-live="polite">
     <div class="load-inner">
-      <h2 class="load-title">CHRONO-FRONT: GALACTIC WAR</h2>
+      <h2 class="load-title">GALACTIC WARFARE: DEFENSE FOR PLANET EARTH</h2>
       <div class="load-bar-wrap" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loadProgress">
         <div class="load-bar-fill" id="loadBarFill"></div>
       </div>
       <p class="load-status" id="loadStatus">Initializing…</p>
+      <button class="loading-audio-toggle" type="button" data-audio-toggle aria-pressed="false">ENABLE SOUND</button>
     </div>
   </div>
 
@@ -72,32 +82,37 @@
   <!-- Phaser 3 -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
 
+  <script src="public/js/audio.js"></script>
+  <script>window.GWAudio.setScene('loading');</script>
+
   <!-- Config (first — defines GW namespace) -->
-  <script src="./public/js/config.js"></script>
+  <script src="public/js/config.js"></script>
 
   <!-- New systems (load before progression) -->
-  <script src="./public/js/game/firebase.js"></script>
-  <script src="./public/js/game/progression.js"></script>
-  <script src="./public/js/game/cards.js"></script>
-  <script src="./public/js/game/sprites.js"></script>
-  <script src="./public/js/game/briefing.js"></script>
+  <script src="public/js/game/firebase.js"></script>
+  <script src="public/js/game/sheets-client.js"></script>
+  <script src="public/js/game/progression.js"></script>
+  <script src="public/js/graphics.js"></script>
+  <script src="public/js/game/cards.js"></script>
+  <script src="public/js/game/sprites.js"></script>
+  <script src="public/js/game/briefing.js"></script>
 
   <!-- Core game subsystems (dependency order) -->
-  <script src="./public/js/game/levels.js"></script>
-  <script src="./public/js/game/characters.js"></script>
-  <script src="./public/js/game/enemies.js"></script>
-  <script src="./public/js/game/player.js"></script>
-  <script src="./public/js/game/resources.js"></script>
-  <script src="./public/js/game/projectiles.js"></script>
-  <script src="./public/js/game/collision.js"></script>
-  <script src="./public/js/game/combat.js"></script>
-  <script src="./public/js/game/waves.js"></script>
-  <script src="./public/js/game/sentinel.js"></script>
-  <script src="./public/js/game/currency.js"></script>
-  <script src="./public/js/game/ui.js"></script>
-  <script src="./public/js/game/scenes.js"></script>
-  <script src="./public/js/game/game.js"></script>
-  <script src="./public/js/main.js"></script>
+  <script src="public/js/game/levels.js"></script>
+  <script src="public/js/game/characters.js"></script>
+  <script src="public/js/game/enemies.js"></script>
+  <script src="public/js/game/player.js"></script>
+  <script src="public/js/game/resources.js"></script>
+  <script src="public/js/game/projectiles.js"></script>
+  <script src="public/js/game/collision.js"></script>
+  <script src="public/js/game/combat.js"></script>
+  <script src="public/js/game/waves.js"></script>
+  <script src="public/js/game/sentinel.js"></script>
+  <script src="public/js/game/currency.js"></script>
+  <script src="public/js/game/ui.js"></script>
+  <script src="public/js/game/scenes.js"></script>
+  <script src="public/js/game/game.js"></script>
+  <script src="public/js/main.js"></script>
 
 </body>
 </html>

@@ -1,7 +1,7 @@
 {
-  "name": "garden-warfare-reborn",
-  "version": "1.0.0",
-  "description": "Garden Warfare: Reborn - A 2D lane-based tower defense strategy game",
+  "name": "galactic-warfare-defense-for-planet-earth",
+  "version": "1.0.1",
+  "description": "Galactic Warfare: Defense for Planet Earth - A 2D lane-based tower defense strategy game",
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",

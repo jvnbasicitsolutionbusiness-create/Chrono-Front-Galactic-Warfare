@@ -2,18 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#04060f" />
-  <meta name="description" content="Chrono-Front: Galactic War — Login or create your Commander account." />
-  <title>Chrono-Front: Galactic War — Login</title>
+  <meta name="description" content="Galactic Warfare: Defense for Planet Earth — Login or create your Commander account." />
+  <title>Galactic Warfare: Defense for Planet Earth — Login</title>
 
   <!-- Styles -->
- <link rel="stylesheet" href="./public/css/auth.css" />
+  <link rel="stylesheet" href="public/css/auth.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Exo+2:wght@400;600;700;800&display=swap" rel="stylesheet" />
 </head>
 <body>
+
+  <div class="auth-loader" id="authLoader" role="status" aria-live="polite">
+    <span class="auth-loader-mark" aria-hidden="true">✦</span>
+    <p class="auth-loader-title">GALACTIC WARFARE</p>
+    <p class="auth-loader-status" id="authLoaderStatus">Establishing secure uplink...</p>
+    <div class="auth-loader-track"><span id="authLoaderFill"></span></div>
+    <button class="loading-audio-toggle" type="button" data-audio-toggle aria-pressed="false">ENABLE SOUND</button>
+  </div>
 
   <!-- ── Animated background ─────────────────────────────── -->
   <div class="auth-bg" aria-hidden="true">
@@ -30,10 +38,10 @@
   <main class="auth-page" role="main">
 
     <!-- Game title -->
-    <div class="auth-game-title" aria-label="Chrono-Front: Galactic War">
-      <span class="title-top">CHRONO-FRONT</span>
+    <div class="auth-game-title" aria-label="Galactic Warfare: Defense for Planet Earth">
+      <span class="title-top">GALACTIC WARFARE</span>
       <span class="title-divider" aria-hidden="true">✦</span>
-      <span class="title-bottom">GALACTIC WAR</span>
+      <span class="title-bottom">DEFENSE FOR PLANET EARTH</span>
     </div>
 
     <!-- Auth panel -->
@@ -176,9 +184,9 @@
               id="regPassword"
               name="new-password"
               autocomplete="new-password"
-              placeholder="Minimum 8 characters"
+              placeholder="Minimum 12 characters"
               required
-              minlength="8"
+              minlength="12"
               maxlength="128"
               aria-describedby="regPwErr"
             />
@@ -223,10 +231,17 @@
 
     </div><!-- /.auth-panel -->
 
+    <div class="auth-entry-actions">
+      <button class="auth-submit auth-continue" id="continueSessionBtn" type="button" hidden>CONTINUE SAVED COMMANDER</button>
+      <p class="auth-entry-note" id="continueSessionNote" hidden>This saved login is on this device only. Use your registered email and password on another device.</p>
+      <button class="auth-submit auth-guest" id="guestModeBtn" type="button">PLAY AS GUEST · UNSAVED DEMO</button>
+      <p class="auth-entry-note">Registered sign-in saves your account progress and settings. Guest demo data is not saved.</p>
+    </div>
+
     <p class="auth-terms-footer">
       By playing, you agree to our
-      <a href="#">Terms</a> &amp;
-      <a href="#">Privacy Policy</a>.
+      <a href="terms.html" target="_blank" rel="noopener">Terms</a> &amp;
+      <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.
     </p>
 
   </main><!-- /.auth-page -->
@@ -253,8 +268,31 @@
     });
   </script>
 
+  <!-- Adaptive network runtime (backend / Apps Script auto-detect) -->
+  <script src="public/js/audio.js"></script>
+  <script>window.GWAudio.setScene('loading');</script>
+  <script src="public/js/runtime.js"></script>
   <!-- Main auth logic -->
-  <script src="./public/js/auth.js"></script>
+  <script src="public/js/auth.js"></script>
+  <script>
+    (function () {
+      var loader = document.getElementById('authLoader');
+      var fill = document.getElementById('authLoaderFill');
+      var status = document.getElementById('authLoaderStatus');
+      var progress = 0;
+      var timer = window.setInterval(function () {
+        progress = Math.min(100, progress + 10);
+        if (fill) fill.style.width = progress + '%';
+        if (status && progress >= 60) status.textContent = 'Preparing commander access...';
+        if (progress >= 100) {
+          window.clearInterval(timer);
+          window.GWAudio.setScene('auth');
+          loader.classList.add('auth-loader--done');
+          window.setTimeout(function () { loader.remove(); }, 550);
+        }
+      }, 90);
+    })();
+  </script>
 
 </body>
 </html>
