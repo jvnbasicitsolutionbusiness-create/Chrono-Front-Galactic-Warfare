@@ -13,8 +13,8 @@ public/assets/
 │   ├── battlefield/ — per-environment battlefield backgrounds (SVG, 960x600)
 │   │   ├── daytime.svg
 │   │   ├── nighttime.svg
-│   │   ├── foggy.svg
-│   │   ├── rainy_stormy.svg
+│   │   ├── flooded.svg
+│   │   ├── storm.svg
 │   │   └── radioactive.svg
 │   ├── briefing/    — briefing screen background
 │   ├── defeat/      — game over screen background
