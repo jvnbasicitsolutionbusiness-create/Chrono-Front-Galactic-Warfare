@@ -14,8 +14,8 @@
 
 GW.ProgressionManager = class ProgressionManager {
   constructor() {
-    this._key  = 'gwr_progression_v2';
     this.isGuest = this._isGuestMode();
+    this._key = this.isGuest ? null : this._getStorageKey();
     this.state = this.isGuest ? this._defaultState() : this._load();
   }
 
@@ -23,8 +23,20 @@ GW.ProgressionManager = class ProgressionManager {
     try { return sessionStorage.getItem('gw_mode') === 'guest'; } catch (_) { return false; }
   }
 
+  _getStorageKey() {
+    try {
+      const user = JSON.parse(localStorage.getItem('gw_user') || 'null');
+      const email = user && typeof user.email === 'string' ? user.email.trim().toLowerCase() : '';
+      return email ? 'gwr_progression_v2:' + encodeURIComponent(email) : null;
+    } catch (e) {
+      console.warn('[Progression] Could not identify the signed-in account.', e);
+      return null;
+    }
+  }
+
   // ── Load / Save ───────────────────────────────────────────
   _load() {
+    if (!this._key) return this._defaultState();
     try {
       const raw = localStorage.getItem(this._key);
       if (raw) {
@@ -69,18 +81,32 @@ GW.ProgressionManager = class ProgressionManager {
     };
   }
 
-  save() {
+  saveLocal() {
     if (this.isGuest || this._isGuestMode()) return;
+    if (!this._key) {
+      console.warn('[Progression] Save skipped because no registered account email is available.');
+      return;
+    }
     try { localStorage.setItem(this._key, JSON.stringify(this.state)); } catch (e) {
       console.warn('[Progression] Save failed.', e);
     }
+  }
+
+  save() {
+    if (this.isGuest || this._isGuestMode()) return;
+    this.saveLocal();
     // Async Sheets sync (fire-and-forget) — uses sheetsClient which also aliases firebaseClient
     const client = (window.GW && window.GW.sheetsClient) || (window.GW && window.GW.firebaseClient);
     if (client && client.ready) {
       let user = {};
       try { user = JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) {}
-      const uid = user.email || this.state.playerName || 'anonymous';
-      client.saveProgression(uid, this.state).catch(() => {});
+      if (!user.email) {
+        console.warn('[Progression] Cloud save skipped because the account email is missing.');
+        return;
+      }
+      client.saveProgression(user.email, this.state).catch(e => {
+        console.warn('[Progression] Cloud save failed.', e);
+      });
     }
   }
 

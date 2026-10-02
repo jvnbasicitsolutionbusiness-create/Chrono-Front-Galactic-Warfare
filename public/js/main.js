@@ -21,10 +21,10 @@
   }
 
   let pixelArt = GW.DISPLAY.PIXEL_ART !== false;
-  try {
-    const saved = JSON.parse(localStorage.getItem('gwr_progression_v2') || '{}');
-    if (saved.settings && saved.settings.pixelArt != null) pixelArt = !!saved.settings.pixelArt;
-  } catch (_) {}
+  const savedProgression = GW.progression && GW.progression.state;
+  if (savedProgression && savedProgression.settings && savedProgression.settings.pixelArt != null) {
+    pixelArt = !!savedProgression.settings.pixelArt;
+  }
 
   const config = {
     type: Phaser.AUTO,

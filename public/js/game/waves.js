@@ -168,7 +168,7 @@ GW.WaveManager = class WaveManager {
   // ── MODE 2: Half-HP chain (scouts) ───────────────────────
   // v1.0.1 rule:
   //   First 5 entries  → wait for previous alien to reach ≤ 50% HP before spawning next.
-  //   Entries 6+       → spawn freely on a randomised 8–12 s interval.
+  //   Entries 6+       -> spawn freely on a randomised 30-50 s interval.
   _beginHalfHpChain(enemies, waveDef) {
     this._chainIndex      = 0;
     this._chainEnemy      = null;
@@ -240,23 +240,13 @@ GW.WaveManager = class WaveManager {
   }
 
   _chooseArrivalGroup(remaining, waveDef) {
-    const weights = waveDef && waveDef.spawnGroupWeights;
-    let requestedSize;
-    if (weights && weights.length === 3) {
-      const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-      let roll = Math.random() * totalWeight;
-      requestedSize = weights.findIndex(weight => (roll -= weight) < 0) + 1;
-    } else {
-      const roll = Math.random();
-      requestedSize = roll < 0.5 ? 1 : roll < 0.7 ? 2 : 3;
-    }
-    const size = Math.min(remaining, requestedSize);
+    const size = GW.WAVES.chooseGroupSize(remaining);
     if (waveDef && waveDef.spawnInterval) {
       const [minDelay, maxDelay] = waveDef.spawnInterval;
       return { size, delay: minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1)) };
     }
-    const range = size === 1 ? [12000, 15000] : size === 2 ? [16000, 19000] : [14000, 18000];
-    return { size, delay: range[0] + Math.floor(Math.random() * (range[1] - range[0] + 1)) };
+    const [minDelay, maxDelay] = GW.WAVES.APPROACH_INTERVAL;
+    return { size, delay: minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1)) };
   }
 
   _pollForHalfHp(enemies, waveDef) {
@@ -294,16 +284,26 @@ GW.WaveManager = class WaveManager {
    // ── MODE 3: Staged horde ────────────────────────────────
    // The flag bearer leads; drones arrive in weighted groups with longer delays.
   _beginHordeWave(enemies, waveDef) {
-    const flagIndex = enemies.findIndex(entry => entry.type === 'vex_flag_bearer');
-    if (flagIndex >= 0) {
-      this._spawnEnemy(enemies[flagIndex], waveDef);
-      this._spawnedCount++;
-      this._spawnedEntryIndexes.push(flagIndex);
-    }
-    const pending = enemies.map((entry, index) => ({ entry, index }))
-      .filter(item => item.index !== flagIndex);
-    this._scheduleHordeBatch(pending, waveDef);
-  }
+     const flagIndexes = enemies.reduce((indexes, entry, index) => {
+       if (entry.type === 'vex_flag_bearer') indexes.push(index);
+       return indexes;
+     }, []);
+     const flagLimit = waveDef.flagBearerCount == null ? 1 : waveDef.flagBearerCount;
+     const leadingFlagIndexes = flagIndexes.slice(0, flagLimit);
+     const suppressedFlags = flagIndexes.length - leadingFlagIndexes.length;
+     if (suppressedFlags > 0) {
+       this._totalInWave -= suppressedFlags;
+       this._totalScheduledAllWaves -= suppressedFlags;
+     }
+     leadingFlagIndexes.forEach(flagIndex => {
+       this._spawnEnemy(enemies[flagIndex], waveDef);
+       this._spawnedCount++;
+       this._spawnedEntryIndexes.push(flagIndex);
+     });
+     const pending = enemies.map((entry, index) => ({ entry, index }))
+       .filter(item => item.entry.type !== 'vex_flag_bearer');
+     this._scheduleHordeBatch(pending, waveDef);
+   }
 
   _scheduleHordeBatch(pending, waveDef) {
     if (!pending.length) {
@@ -435,14 +435,10 @@ GW.WaveManager = class WaveManager {
     }
 
     if (waveDef.isHorde) {
-      const flagPending = pending.find(item => item.entry.type === 'vex_flag_bearer');
+      const flagPending = pending.filter(item => item.entry.type === 'vex_flag_bearer');
       const dronesPending = pending.filter(item => item.entry.type !== 'vex_flag_bearer');
-      if (flagPending) {
-        this._scheduleRestoredBatch([flagPending], waveDef, 0);
-        this._scheduleRestoredBatch(dronesPending, waveDef);
-      } else {
-        this._scheduleRestoredBatch(dronesPending, waveDef);
-      }
+      flagPending.forEach(item => this._scheduleRestoredBatch([item], waveDef, 0));
+      this._scheduleRestoredBatch(dronesPending, waveDef);
       return;
     }
 

@@ -346,10 +346,15 @@
 
     // Server returns { ok, email, commanderName, token, progress }
     const commanderName = data.commanderName || data.username || email.split('@')[0];
-    if (data.progression && typeof data.progression === 'object') {
-      try { localStorage.setItem('gwr_progression_v2', JSON.stringify(data.progression)); } catch (_) {}
+    const accountEmail = data.email || email;
+    persistSession(data.token, { email: accountEmail, commanderName });
+    if (data.progression && typeof data.progression === 'object' && !Array.isArray(data.progression)) {
+      try {
+        localStorage.setItem(progressionStorageKey(accountEmail), JSON.stringify(data.progression));
+      } catch (e) {
+        console.warn('[Auth] Could not cache the account progression.', e);
+      }
     }
-    persistSession(data.token, { email: data.email || email, commanderName });
     sessionStorage.removeItem('gw_guess_mode');
     sessionStorage.setItem('gw_mode', 'registered');
     sessionStorage.setItem('gw_entry_authorized', '1');
@@ -447,6 +452,10 @@
     localStorage.setItem('gw_id_token',  token || '');   // auth-guard alias
     localStorage.setItem(USER_KEY,       JSON.stringify(user));
     localStorage.setItem('gw_last_login_at', String(Date.now()));
+  }
+
+  function progressionStorageKey(email) {
+    return 'gwr_progression_v2:' + encodeURIComponent(String(email || '').trim().toLowerCase());
   }
 
   function clearSession() {

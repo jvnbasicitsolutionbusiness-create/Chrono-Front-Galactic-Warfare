@@ -91,14 +91,14 @@ GW.RESOURCES = {
 // â”€â”€â”€ Galactic Currency System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CURRENCY = {
   // Independent drop chances per kill; a kill can produce more than one type.
-  DROP_CHANCES: { silver_coin: [0.20, 0.30], gold_coin: [0.10, 0.15], emerald: [0.08, 0.12], diamond: [0.05, 0.10], coin_bag: [0.01, 0.03] },
+  DROP_CHANCES: { silver_coin: [0.50, 0.50], gold_coin: [0.30, 0.30], emerald: [0.15, 0.15], diamond: [0.10, 0.10], coin_bag: [0.05, 0.05] },
   // Currency types with their values
   TYPES: {
     silver_coin: { id: 'silver_coin',  name: 'Silver Galactic Coin', value: 1,  color: 0xc0c0c0, glowColor: 0xe8e8ff },
     gold_coin:   { id: 'gold_coin',    name: 'Gold Galactic Coin',   value: 5,  color: 0xffd700, glowColor: 0xffed4a },
     emerald:     { id: 'emerald',      name: 'Emerald Galactic Coin',value: 10, color: 0x10b981, glowColor: 0x6ee7b7 },
-    diamond:     { id: 'diamond',      name: 'Diamond Galactic Coin',value: 15, color: 0x67e8f9, glowColor: 0xcffafe },
-    coin_bag:    { id: 'coin_bag',     name: 'Galactic Coin Bag',    value: 45, color: 0xf59e0b, glowColor: 0xfde68a },
+    diamond:     { id: 'diamond',      name: 'Diamond Galactic Coin',value: 20, color: 0x67e8f9, glowColor: 0xcffafe },
+    coin_bag:    { id: 'coin_bag',     name: 'Galactic Coin Bag',    value: 50, contents: { silver_coin: 5, gold_coin: 3, emerald: 1, diamond: 1 }, color: 0xf59e0b, glowColor: 0xfde68a },
   },
   LIFETIME:       14000,   // ms before uncollected currency fades
   FLOAT_DURATION:  800,    // ms for collection float animation
@@ -107,10 +107,18 @@ GW.CURRENCY = {
 // â”€â”€â”€ Wave System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.WAVES = {
   BETWEEN_WAVE_DELAY:  9000,    // 8-10s pause between pre-wave and assault wave
-  SPAWN_DELAY:         17500,   // 15-20s between individual pre-wave aliens
+  SPAWN_DELAY:         40000,   // midpoint of the 30-50s alien approach interval
   INITIAL_DELAY:       20000,   // 20s before first alien appears (player prep time)
-  PRESSURE_DELAY:      17500,
+  PRESSURE_DELAY:      40000,
+  APPROACH_INTERVAL:   [30000, 50000],
+  SPAWN_GROUP_CHANCES: { SINGLE: 0.75, TRIPLE_WITHIN_MULTI: 0.5 },
+  chooseGroupSize(remaining) {
+    if (Math.random() < this.SPAWN_GROUP_CHANCES.SINGLE) return 1;
+    return Math.min(Math.random() < this.SPAWN_GROUP_CHANCES.TRIPLE_WITHIN_MULTI ? 3 : 2, remaining);
+  },
 };
+
+GW.SHOVEL = { COST: 200 };
 
 // â”€â”€â”€ Combat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.COMBAT = {
@@ -139,6 +147,7 @@ GW.CAMERA_RECON = {
 };
 
 // â”€â”€â”€ Alien Equipment Variants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+/* Legacy equipment data is replaced by the normalized table below.
 GW.ALIEN_EQUIPMENT = {
   // â”€â”€ 10 equipment tiers matching the spec table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Each entry: baseHp=100 (the alien body HP), extraHp=shield/armor HP on top,
@@ -239,6 +248,69 @@ GW.ALIEN_EQUIPMENT = {
 };
 
 // â”€â”€â”€ Battlefield Loadout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+*/
+// Common alien gear adds 50-300 HP above the 200 HP base.
+GW.ALIEN_EQUIPMENT = {
+  bare: { id: 'bare', name: 'Common Alien', tier: 1 },
+  cap: {
+    id: 'cap', name: 'Blue Cap', tier: 2, extraHp: 50, speedMult: 1.0,
+    equipColor: 0x1d4ed8, equipName: 'Stolen Cap',
+  },
+  iron_mask: {
+    id: 'iron_mask', name: 'Iron Mask', tier: 2, extraHp: 100, speedMult: 1.0,
+    equipColor: 0x78716c, equipName: 'Iron Mask', breakAnim: 'mask_crack',
+  },
+  steel_helmet: {
+    id: 'steel_helmet', name: 'Steel Helmet', tier: 3, extraHp: 150, speedMult: 0.95,
+    equipColor: 0x9ca3af, equipName: 'Steel Helmet', breakAnim: 'helmet_crack',
+  },
+  armored_vest: {
+    id: 'armored_vest', name: 'Armored Vest', tier: 3, extraHp: 200, speedMult: 0.9,
+    equipColor: 0x374151, equipName: 'Armored Vest', breakAnim: 'armor_collapse',
+  },
+  shield: {
+    id: 'shield', name: 'Energy Shield', tier: 3, extraHp: 250, speedMult: 0.9,
+    equipColor: 0x0369a1, equipName: 'Energy Shield',
+    breakAnim: 'shield_break', shieldType: true,
+  },
+  heavy_helmet: {
+    id: 'heavy_helmet', name: 'Heavy Helmet Alien', tier: 4, extraHp: 300,
+    speedMult: 0.8, equipColor: 0x1e3a5f, equipName: 'Reinforced Helmet',
+    breakAnim: 'heavy_helmet_break',
+  },
+  full_armor: {
+    id: 'full_armor', name: 'Full Armor Alien', tier: 4, extraHp: 300,
+    speedMult: 0.75, equipColor: 0x1f2937, equipName: 'Full Armor',
+    breakAnim: 'armor_collapse',
+  },
+  riot_shield: {
+    id: 'riot_shield', name: 'Riot Shield Alien', tier: 4, extraHp: 300,
+    speedMult: 0.7, equipColor: 0x0c1445, equipName: 'Heavy Shield + Helmet',
+    breakAnim: 'riot_break', shieldType: true,
+  },
+  tactical_armor: {
+    id: 'tactical_armor', name: 'Tactical Armor Alien', tier: 4, extraHp: 300,
+    speedMult: 0.8, equipColor: 0x292524, equipName: 'Combat Armor',
+    breakAnim: 'tactical_shatter',
+  },
+  wooden_shield: {
+    id: 'wooden_shield', name: 'Wooden Shield Alien', tier: 3,
+    extraHp: 100, speedMult: 0.95, equipColor: 0x92400e, equipName: 'Wooden Shield',
+  },
+  bicycle: {
+    id: 'bicycle', name: 'Bicycle Alien', tier: 3,
+    extraHp: 50, speedMult: 1.4, equipColor: 0x0f766e, equipName: 'Bicycle',
+  },
+  newspaper: {
+    id: 'newspaper', name: 'Newspaper Alien', tier: 3,
+    extraHp: 50, speedMult: 1.0, equipColor: 0xe5e7eb, equipName: 'Newspaper Armor',
+  },
+  museum_armor: {
+    id: 'museum_armor', name: 'Museum Armor Alien', tier: 4,
+    extraHp: 300, speedMult: 0.8, equipColor: 0x78716c, equipName: 'Museum Suit of Armor',
+  },
+};
+
 GW.LOADOUT = {
   MAX_CARDS:     6,
   DEFAULT_CARDS: ['plasma_energy_generator', 'fire_lancer'],
@@ -303,13 +375,13 @@ GW.WEAPONS = {
   // v1.0.1: fire_lance range extended so ranged attackers can target enemies in alien zone
   fire_lance: {
     id: 'fire_lance', name: 'Fire Lance', era: 'early',
-    damage: 10, attackSpeed: 2500, range: 900,
+    damage: 10, attackSpeed: 2500, range: 900, projectileSpeed: 380,
     projectileColor: 0xff6b00, projectileSize: 5, projectileType: 'fire',
     description: '10th-century Chinese fire-lance. Long range. 10 damage per shot.',
   },
   hand_cannon: {
     id: 'hand_cannon', name: 'Hand Cannon', era: 'early',
-    damage: 40, attackSpeed: 2200, range: 450, projectileSpeed: 523,
+    damage: 40, attackSpeed: 2200, range: 450, projectileSpeed: 475,
     projectileColor: 0xd97706, projectileSize: 6, projectileType: 'cannonball',
     description: 'Early-era hand-held cannon. Slow reload, powerful at range.',
   },
@@ -328,13 +400,13 @@ GW.WEAPONS = {
   // Era: industrial
   rifle: {
     id: 'rifle', name: 'Rifle', era: 'industrial',
-    damage: 45, attackSpeed: 1600, range: 380,
+    damage: 45, attackSpeed: 1600, range: 450, projectileSpeed: 475,
     projectileColor: 0xfde68a, projectileSize: 5, projectileType: 'bullet',
     description: 'Accurate bolt-action rifle.',
   },
   sniper_rifle: {
     id: 'sniper_rifle', name: 'Sniper Rifle', era: 'industrial',
-    damage: 120, attackSpeed: 4000, range: 700, projectileSpeed: 732,
+    damage: 120, attackSpeed: 4000, range: 700, projectileSpeed: 665,
     projectileColor: 0xfef3c7, projectileSize: 4, projectileType: 'sniper',
     description: 'Very high damage, very slow fire rate. Long range.',
   },
@@ -460,7 +532,7 @@ GW.CARDS = {
   bomber: {
     id: 'bomber', name: 'Bombman',
     era: 'early', role: 'offense', cardSlot: 'adv_1',
-    hp: 70, weapon: null, damage: 500, attackSpeed: 0, range: 260,
+    hp: 70, weapon: null, damage: 500, attackSpeed: 0, range: 260, laneRadius: 1,
     cost: 120, unlockLevel: 1, isBossReward: false,
     rarity: 'common',
     deployCooldown: 12000,  // 12s deploy cooldown
@@ -1148,6 +1220,16 @@ GW.CARD_ABILITY_RULES = {
     else if (tier.rarity === 'ultra_rare') card.cost = 300 + (level % 5) * 50;
     else if (tier.rarity === 'legendary') card.cost = 500 + (level % 6) * 100;
     else card.cost = 1000 + (level % 5) * 500;
+
+    const weapon = card.weapon && GW.WEAPONS[card.weapon];
+    if (weapon && card.weapon === 'rifle') {
+      card.range = GW.WEAPONS.rifle.range;
+      card.projectileSpeed = GW.WEAPONS.rifle.projectileSpeed;
+    } else if (weapon && card.weapon === 'sniper_rifle') {
+      card.projectileSpeed = GW.WEAPONS.sniper_rifle.projectileSpeed;
+    } else if (weapon && card.weapon === 'fire_lance') {
+      card.projectileSpeed = GW.WEAPONS.fire_lance.projectileSpeed;
+    }
   });
 })();
 
@@ -1260,7 +1342,7 @@ GW.ENEMIES = {
   },
   vex_overlord: {
     id:            'vex_overlord',
-    name:          'Vex Overlord',
+    name:          'Doctor Malgaroth',
     class:         'boss',
     tier:          6,
     hp:            100000,
@@ -1271,7 +1353,7 @@ GW.ENEMIES = {
     color:         0x0f172a,
     accentColor:   0x818cf8,
     eyeColor:      0x6366f1,
-    description:   'Final alien boss. Multiple phases. Summons reinforcements. 100,000+ HP.',
+    description:   'Doctor Malgaroth, the final radioactive invasion boss. 100,000 HP.',
     specialAbility: 'boss_phase',
     introducedLevel: 50,
     isBoss:        true,
@@ -1409,6 +1491,25 @@ GW.ENEMY_CATEGORIES = {
 // (Future: EnemyFactory can resolve from both maps)
 Object.assign(GW.ENEMIES, GW.ENEMY_CATEGORIES);
 
+Object.values(GW.ENEMIES).forEach(enemy => {
+  if (enemy.id === 'vex_overlord') {
+    enemy.hp = 100000;
+    return;
+  }
+  if (enemy.isFlag) return;
+  if (enemy.class === 'basic') {
+    enemy.hp = 200;
+  } else if (enemy.class === 'elite') {
+    enemy.hp = Math.max(500, Math.min(1000, enemy.hp));
+  } else if (enemy.class === 'advanced' || enemy.class === 'aerial' || enemy.class === 'vehicle') {
+    enemy.hp = Math.max(1000, Math.min(5000, enemy.hp));
+  } else if (enemy.class === 'brute') {
+    enemy.hp = Math.max(5000, Math.min(10000, enemy.hp));
+  } else {
+    enemy.hp = Math.max(250, Math.min(500, enemy.hp));
+  }
+});
+
 
 // â”€â”€â”€ Environment Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // SPEC Â§9: Exact 5 environments with exact level ranges
@@ -1504,7 +1605,7 @@ GW.ENVIRONMENTS = {
       // halfHpChain:true â€” WaveManager will spawn the NEXT scout only when the
       // PREVIOUS one reaches half HP, rather than using fixed delay offsets.
       // Lanes are randomised (not staircase) so aliens appear unpredictably.
-      { id: 'scouts', label: 'SCOUTS', approachInterval: [15000, 20000], enemies: [
+      { id: 'scouts', label: 'SCOUTS', approachInterval: GW.WAVES.APPROACH_INTERVAL, enemies: [
         { type: 'vex_drone', lane: 3, delay: 0 },
         { type: 'vex_drone', lane: 1, delay: 0 },
         { type: 'vex_drone', lane: 5, delay: 0 },
@@ -1709,7 +1810,7 @@ GW.ENVIRONMENTS = {
 
   /**
    * Scout delay: cumulative ms from wave start.
-   * Each scout gets a 12â€“20s individual gap from the previous.
+  * Each scout approach gets a 30-50s gap from the previous.
    * Uses deterministic pseudo-random (seed-based) so values are consistent.
    */
   function scoutDelays(count, seed, spawnProfile) {
@@ -1717,26 +1818,21 @@ GW.ENVIRONMENTS = {
     let acc = 0;
     for (let i = 0; i < count;) {
       const groupStart = i;
-      let groupSize = 1;
-      if (spawnProfile && spawnProfile.groupWeights) {
-        const weights = spawnProfile.groupWeights;
-        const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-        let roll = Math.random() * totalWeight;
-        groupSize = weights.findIndex(weight => (roll -= weight) < 0) + 1;
-      }
+      const groupSize = GW.WAVES.chooseGroupSize(count - i);
       for (let member = 0; member < groupSize && i < count; member++, i++) delays.push(acc);
       if (spawnProfile) {
         acc += spawnProfile.interval[0] + Math.floor(Math.random() * (spawnProfile.interval[1] - spawnProfile.interval[0] + 1));
       } else {
         const r = ((seed + groupStart * 7919) * 1664525 + 1013904223) % 2147483648;
-        acc += 15000 + (r % 5001);
+        const [minDelay, maxDelay] = GW.WAVES.APPROACH_INTERVAL;
+        acc += minDelay + (Math.abs(r) % (maxDelay - minDelay + 1));
       }
     }
     return delays;
   }
 
   /**
-   * Assault wave delays: 15-30 aliens, each 4-6s apart from the previous.
+  * Assault wave delays: 15-30 aliens, each 30-50s apart from the previous.
    * Returns array of cumulative ms delays from wave start.
    */
   function assaultDelays(count, seed) {
@@ -1745,7 +1841,8 @@ GW.ENVIRONMENTS = {
     for (let i = 0; i < count; i++) {
       delays.push(acc);
       const r = ((seed + i * 6271) * 22695477 + 1) % 2147483648;
-      const gap = 4000 + (r % 2001); // [4000, 6000]
+      const [minDelay, maxDelay] = GW.WAVES.APPROACH_INTERVAL;
+      const gap = minDelay + (Math.abs(r) % (maxDelay - minDelay + 1));
       acc += gap;
     }
     return delays;
@@ -1769,16 +1866,30 @@ GW.ENVIRONMENTS = {
     const [approachMin, approachMax] = approachRanges[diff];
     const tierProgress = Math.max(0, Math.min(1, (levelId - tierMin) / Math.max(1, tierMax - tierMin)));
     const scoutCount = Math.round(approachMin + tierProgress * (approachMax - approachMin));
-    const enemyTypeForLevel = (index) => {
-      if (levelId < 11) return 'vex_drone';
-      if (levelId >= 25 && index % 30 === 0) return 'vex_colossus';
-      if (index % 21 === 0) return 'vex_jetpack';
-      if (index % 18 === 0) return 'vex_tiny_ship';
-      if (index % 15 === 0) return 'vex_hover_bike';
-      if (index % 12 === 0) return 'vex_vehicle_rider';
-      if (index % 9 === 0) return 'vex_advanced';
-      if (index % 6 === 0) return 'vex_elite';
-      return 'vex_drone';
+    const enemyTypeForLevel = () => {
+      if (levelId < 6) return 'vex_drone';
+
+      const commonVariants = levelId < 11
+        ? ['vex_runner']
+        : ['vex_drone', 'vex_runner', 'vex_jetpack', 'vex_tiny_ship', 'vex_hover_bike', 'vex_vehicle_rider'];
+
+      if (levelId < 11) {
+        return Math.random() < 0.6
+          ? commonVariants[0]
+          : 'vex_drone';
+      }
+
+      const commonChance = levelId < 21 ? 0.75 : 0.6;
+      const eliteChance = 0.25;
+      const advancedChance = levelId >= 21 ? 0.15 : 0;
+      const roll = Math.random();
+
+      if (roll < commonChance) return commonVariants[Math.floor(Math.random() * commonVariants.length)];
+      if (roll < commonChance + eliteChance) return 'vex_elite';
+
+      const advancedVariants = levelId >= 25 ? ['vex_advanced', 'vex_colossus'] : ['vex_advanced'];
+      if (advancedChance > 0) return advancedVariants[Math.floor(Math.random() * advancedVariants.length)];
+      return commonVariants[Math.floor(Math.random() * commonVariants.length)];
     };
 
     // Base assault size per difficulty tier â€” scales up within each tier by level.
@@ -1833,7 +1944,7 @@ GW.ENVIRONMENTS = {
         isFinalWave: isFinal,
         isHorde:     true,
         warningDelay: 3000,
-        spawnGroupWeights: spawnProfile && spawnProfile.groupWeights,
+        flagBearerCount: flagCount,
         spawnInterval: spawnProfile && spawnProfile.interval,
         enemies:     enemies,
       });
@@ -1862,7 +1973,6 @@ GW.ENVIRONMENTS = {
         : assaultDelays(10, seed + 888888);
       waves.push({
         id: 'wave_boss', label: 'OVERLORD APPROACHES', isMajorWave: true, isBossWave: true,
-        spawnGroupWeights: spawnProfile && spawnProfile.groupWeights,
         spawnInterval: spawnProfile && spawnProfile.interval,
         enemies: bossDelays.map(function(delay, i) {
           return {
@@ -1880,7 +1990,7 @@ GW.ENVIRONMENTS = {
 
   // â”€â”€ Difficulty mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const diffMap = { easy: 0, moderate: 1, medium: 2, hard: 3, expert: 4, impossible: 5, extreme: 5 };
-  const nonAdventureSpawnProfile = { groupWeights: [75, 25, 15], interval: [20000, 20000] };
+  const nonAdventureSpawnProfile = { interval: [30000, 50000] };
 
   // â”€â”€ Assign waves to ALL levels 2-50 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   for (let id = 2; id <= 50; id++) {

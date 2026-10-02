@@ -88,7 +88,7 @@ GW.Character = class Character {
       this.container.add(warning);
       this.scene.tweens.add({
         targets: warning, alpha: 0.95, scaleX: 1.2, scaleY: 1.2,
-        duration: 400, yoyo: true, repeat: 5,
+        duration: 300, yoyo: true, repeat: 3,
       });
     }
 
@@ -193,7 +193,13 @@ GW.Character = class Character {
     if (this.def.isSuicideUnit) {
       this.bombFuseTimer -= delta;
       return this.bombFuseTimer <= 0
-        ? { explode: true, damage: this.def.damage, range: this.def.range, lane: this.lane }
+        ? {
+            explode: true,
+            damage: this.def.damage,
+            range: this.def.range,
+            lane: this.lane,
+            laneRadius: this.def.laneRadius == null ? 1 : this.def.laneRadius,
+          }
         : null;
     }
 

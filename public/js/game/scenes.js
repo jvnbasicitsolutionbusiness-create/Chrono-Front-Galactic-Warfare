@@ -96,6 +96,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this._gameOver       = false;
     this._gameWon        = false;
     this._selectedCharId = null;
+    this._shovelMode     = false;
     this._paused         = false;
     this._reconDone      = false;
   }
@@ -150,13 +151,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this.sentinelMgr.build(levelData);
 
     // ── HUD ────────────────────────────────────────────────
-    // Flag count by environment/level spec:
-    // daytime L1-9: 1 flag, daytime L10+: 2 flags
-    // nighttime: 2 flags, foggy: 3 flags
-    // rainy_stormy: 4 flags (all levels)
-    // radioactive L1-9: 5 flags, radioactive L10 (boss): 5 flags
+    // Timeline markers track the campaign difficulty bands, with the final
+    // marker reserved for the red final-wave marker.
     const _flagCount = GW.GameScene._getFlagCount(envId, this.levelId);
-    this.uiManager.buildHUD(_flagCount);
+    this.uiManager.buildHUD(_flagCount, this.levelId);
     this.currencyManager.buildHUD();
 
     // ── Pause callbacks ────────────────────────────────────
@@ -1007,13 +1005,35 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   //  INPUT
   // ══════════════════════════════════════════════════════════
   _setupInput(W, H) {
-    this.uiManager.onCharacterSelected = id => { this._selectedCharId = id; };
+    this.uiManager.onCharacterSelected = id => {
+      if (id && this._shovelMode) {
+        this._shovelMode = false;
+        this.uiManager.setShovelActive(false);
+      }
+      this._selectedCharId = id;
+    };
+    this.uiManager.onShovelSelected = active => {
+      if (active && !this.resourceManager.canAfford(GW.SHOVEL.COST)) {
+        this._feedback(GW.DISPLAY.BASE_WIDTH - 193, GW.BOARD.TRAY_HEIGHT / 2, false, 'Need 200 P.E.');
+        return false;
+      }
+      this._shovelMode = active;
+      if (active) {
+        this._selectedCharId = null;
+        this.uiManager.deselectAll();
+      }
+      return true;
+    };
 
     this.input.on('pointerdown', ptr => {
       if (this._gameOver || this._gameWon || this._paused || this.uiManager.isPaused) return;
-      if (!this._selectedCharId) return;
       if (ptr.y <= GW.BOARD.TRAY_HEIGHT) return;
       if (ptr.y >= GW.BOARD.TIMELINE_Y)  return;
+      if (this._shovelMode) {
+        this._tryRemoveCharacter(ptr.x, ptr.y);
+        return;
+      }
+      if (!this._selectedCharId) return;
       this._tryPlaceCharacter(ptr.x, ptr.y);
     });
 
@@ -1024,6 +1044,8 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
     this.input.keyboard.on('keydown-ESC', () => {
       this._selectedCharId = null;
+      this._shovelMode = false;
+      this.uiManager.setShovelActive(false);
       this.uiManager.deselectAll();
       this.uiManager.updateGridHover(-1, -1, false);
     });
@@ -1073,6 +1095,30 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     // Start per-card cooldown if configured (e.g. fire_lance_gunner = 7.5s)
     this.uiManager.startCooldown(this._selectedCharId);
     this._feedback(pos.x, pos.y, true, def.name + ' deployed');
+  }
+
+  _tryRemoveCharacter(worldX, worldY) {
+    const cell = GW.Collision.worldToCell(worldX, worldY);
+    if (!cell) { this._feedback(worldX, worldY, false, 'Invalid position'); return; }
+
+    const character = this.combatManager.characters.find(candidate =>
+      candidate.alive && candidate.lane === cell.lane && candidate.cellIndex === cell.cellIndex
+    );
+    if (!character) { this._feedback(worldX, worldY, false, 'No unit here'); return; }
+
+    const cost = GW.SHOVEL.COST;
+    if (!this.resourceManager.spend(cost)) {
+      this._feedback(worldX, worldY, false, 'Need 200 P.E.');
+      return;
+    }
+
+    this.combatManager.characters.splice(this.combatManager.characters.indexOf(character), 1);
+    character.alive = false;
+    character.target = null;
+    character.destroy();
+    this._shovelMode = false;
+    this.uiManager.setShovelActive(false);
+    this._feedback(character.x, character.y, true, 'Unit removed (-200 P.E.)');
   }
 
   _feedback(x, y, ok, msg) {
@@ -1389,12 +1435,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       savedAt: Date.now(),
     };
     progression.state.activeBattle = snapshot;
-    try {
-      localStorage.setItem('gw_battle_snapshot', JSON.stringify(snapshot));
-      localStorage.setItem('gwr_progression_v2', JSON.stringify(progression.state));
-    } catch (error) {
-      console.warn('[Game] Local checkpoint could not be written.', error);
-    }
+    progression.saveLocal();
     this._battleSnapshotSaved = true;
     this._battleSnapshotSavePromise = (async () => {
       const client = GW.sheetsClient;
@@ -1408,7 +1449,8 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       if (!client.ready) return true;
       let user = {};
       try { user = JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) {}
-      return client.saveProgression(user.email || progression.state.playerName, progression.state);
+      if (!user.email) throw new Error('Cannot save a battle checkpoint without a registered account email.');
+      return client.saveProgression(user.email, progression.state);
     })().catch(error => {
       console.warn('[Game] Cloud checkpoint failed; local checkpoint remains available.', error);
       return false;
@@ -1507,7 +1549,6 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
   _clearBattleSnapshot() {
     this._battleSnapshotSaved = false;
-    try { localStorage.removeItem('gw_battle_snapshot'); } catch (_) {}
     if (GW.progression && GW.progression.state) {
       GW.progression.state.activeBattle = null;
       GW.progression.save();

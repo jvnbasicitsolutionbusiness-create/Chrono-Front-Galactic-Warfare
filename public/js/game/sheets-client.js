@@ -20,8 +20,8 @@
  *
  * DESIGN
  * ──────
- * • All calls are fire-and-forget (the game never waits on Sheets).
- * • localStorage is the primary store; Sheets is the backup sync.
+ * • Gameplay uses a per-account local cache; sign-in restores the cloud copy.
+ * • Non-critical Sheets calls are fire-and-forget; checkpoint saves can be awaited.
  * • safePost() wraps all network calls — never throws to the game.
  * • The Apps Script URL is fetched once from /api/sheets-url.
  */
@@ -55,7 +55,11 @@ GW.SheetsClient = class SheetsClient {
       const progression = window.GW && window.GW.progression;
       if (progression && progression.state && !progression.isGuest) {
         const user = (() => { try { return JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) { return {}; } })();
-        this.saveProgression(user.email || progression.state.playerName, progression.state);
+        if (user.email) {
+          this.saveProgression(user.email, progression.state).catch(e => {
+            console.warn('[Sheets] Initial progression sync failed:', e.message);
+          });
+        }
       }
       console.log('[Sheets] Client ready.');
     } catch (e) {
@@ -73,12 +77,19 @@ GW.SheetsClient = class SheetsClient {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 2500);
     try {
-      await fetch(this._url, {
+      const response = await fetch(this._url, {
         method:  'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body:    JSON.stringify(payload),
         signal:  controller.signal,
       });
+      const text = await response.text();
+      let result = {};
+      try { result = text ? JSON.parse(text) : {}; } catch (_) {}
+      if (!response.ok || result.success === false) {
+        throw new Error(result.message || 'Google Sheets rejected the save (HTTP ' + response.status + ').');
+      }
+      return result;
     } catch (e) {
       console.warn('[Sheets] POST failed (non-fatal):', e.message);
     } finally {
@@ -86,12 +97,20 @@ GW.SheetsClient = class SheetsClient {
     }
   }
 
+  _storageKey(uid) {
+    const email = String(uid || '').trim().toLowerCase();
+    return email ? 'gwr_progression_v2:' + encodeURIComponent(email) : null;
+  }
+
   // ── Progression ────────────────────────────────────────────────────────────
-  /** Save player progression. Always writes localStorage; syncs Sheets if ready. */
+  /** Save progression under the account identity, then sync it to Google Sheets. */
   async saveProgression(uid, state) {
     if (!uid || !state) return;
-    // localStorage is always the fast primary store
-    try { localStorage.setItem('gwr_progression_v2', JSON.stringify(state)); } catch (_) {}
+    const storageKey = this._storageKey(uid);
+    if (!storageKey) return;
+    try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch (e) {
+      console.warn('[Sheets] Local progression cache failed:', e.message);
+    }
     if (!this.ready) return;
     const token = localStorage.getItem('gw_session_token') || localStorage.getItem('gw_id_token');
     const backend = window.GWNet && window.GWNet.state && window.GWNet.state.backend;
@@ -99,22 +118,36 @@ GW.SheetsClient = class SheetsClient {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 2500);
       try {
-        await fetch(this._apiBase + '/api/auth/progression', {
+        const response = await fetch(this._apiBase + '/api/auth/progression', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           keepalive: true,
-          body: JSON.stringify({ token, progression: state }),
+          body: JSON.stringify({
+            token,
+            deviceId: window.GWNet.deviceId,
+            progression: state,
+          }),
           signal: controller.signal,
         });
-      } catch (_) {
+        const result = await response.json();
+        if (!response.ok || !result.ok) {
+          throw new Error(result.error || 'Backend rejected the progression save (HTTP ' + response.status + ').');
+        }
+      } catch (e) {
+        console.warn('[Sheets] Backend progression sync failed:', e.message);
+        throw e;
       } finally {
         window.clearTimeout(timeout);
       }
     } else {
       const user = (() => { try { return JSON.parse(localStorage.getItem('gw_user') || '{}'); } catch (_) { return {}; } })();
+      if (!user.email) {
+        console.warn('[Sheets] Progression sync skipped because the account email is missing.');
+        return;
+      }
       await this.safePost({
         action: 'saveProgression',
-        uid: user.email || uid,
+        uid: user.email,
         commanderName: state.playerName || '',
         progression_json: JSON.stringify(state),
         saved_at: new Date().toISOString(),
@@ -122,12 +155,16 @@ GW.SheetsClient = class SheetsClient {
     }
   }
 
-  /** Load progression — always from localStorage (Sheets is write-only for speed). */
+  /** Load the local cache for the specified account. */
   async loadProgression(uid) {
     try {
-      const raw = localStorage.getItem('gwr_progression_v2');
+      const key = this._storageKey(uid);
+      if (!key) return null;
+      const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
-    } catch (_) {}
+    } catch (e) {
+      console.warn('[Sheets] Local progression load failed:', e.message);
+    }
     return null;
   }
 

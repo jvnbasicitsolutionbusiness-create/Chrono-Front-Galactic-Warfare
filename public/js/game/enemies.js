@@ -200,7 +200,7 @@ GW.Enemy = class Enemy {
       g.lineStyle(2, 0x9ca3af, 0.9);
       g.lineBetween(-6, -12 + bob, 6, -12 + bob);
 
-    } else if (eq.id === 'helmet') {
+    } else if (eq.id === 'helmet' || eq.id === 'steel_helmet' || eq.id === 'heavy_helmet') {
       // Metal helmet — grey military helmet
       g.fillStyle(eq.equipColor, 0.95);
       g.fillRoundedRect(-19, -38 + bob, 38, 14, 6);
@@ -211,6 +211,13 @@ GW.Enemy = class Enemy {
       g.lineStyle(1, 0x9ca3af, 0.6);
       g.lineBetween(-6, -36 + bob, -6, -26 + bob);
       g.lineBetween(6, -36 + bob, 6, -26 + bob);
+
+    } else if (eq.id === 'armored_vest' || eq.id === 'full_armor' || eq.id === 'tactical_armor') {
+      g.fillStyle(eq.equipColor, 0.95);
+      g.fillRoundedRect(-17, -10 + bob, 34, 24, 5);
+      g.lineStyle(2, 0x9ca3af, 0.75);
+      g.lineBetween(-10, -5 + bob, 10, -5 + bob);
+      g.lineBetween(-10, 2 + bob, 10, 2 + bob);
 
     } else if (eq.id === 'wooden_shield') {
       g.fillStyle(eq.equipColor, 0.95);
@@ -242,7 +249,7 @@ GW.Enemy = class Enemy {
       g.lineStyle(2, 0xd6d3d1, 0.9);
       g.lineBetween(0, -36 + bob, 0, 10 + bob);
 
-    } else if (eq.id === 'shield') {
+    } else if (eq.id === 'shield' || eq.id === 'riot_shield') {
       // Stolen shield — renders IN FRONT (higher x, left side of alien)
       g.fillStyle(eq.equipColor, 0.85);
       // Shield shape (tall rectangle with rounded top)

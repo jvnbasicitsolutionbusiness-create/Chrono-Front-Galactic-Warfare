@@ -32,6 +32,9 @@ GW.UIManager = class UIManager {
     // Cooldown tracking: cardId → remaining ms
     this._cooldowns      = {};
     this.bannerText      = null;
+    this.currentLevelText = null;
+    this.shovelActive    = false;
+    this.shovelButton    = null;
 
     // Timeline
     this.timelineBar     = null;
@@ -53,6 +56,7 @@ GW.UIManager = class UIManager {
 
     // Callbacks
     this.onCharacterSelected = null;
+    this.onShovelSelected    = null;
     this.onMenuPressed       = null;
     this.onPauseResume       = null;
     this.onPauseRestart      = null;
@@ -66,12 +70,13 @@ GW.UIManager = class UIManager {
   }
 
   /** Build all HUD elements. Call after subsystems are ready. */
-  buildHUD(totalWaves) {
+  buildHUD(totalWaves, levelId) {
     this._totalWaves = totalWaves || 1;
     this._buildTopBar();
     this._buildTray();
+    this._buildShovelButton();
     this._buildMenuButton();
-    this._buildTimeline();
+    this._buildTimeline(levelId);
     this._buildBanner();
     this._buildGridOverlay();
   }
@@ -193,6 +198,54 @@ GW.UIManager = class UIManager {
       const cy = TH / 2;
       this._buildCardSlot(slot.cardId, slot.def, slot.claimed, cx, cy, CW, CH);
     });
+  }
+
+  _buildShovelButton() {
+    const s = this.scene;
+    const BW = 70, BH = 34;
+    const BX = this.W - 228;
+    const BY = (GW.BOARD.TRAY_HEIGHT - BH) / 2;
+    const bg = s.add.graphics().setDepth(35);
+    const draw = (hover) => {
+      bg.clear();
+      bg.fillStyle(this.shovelActive ? 0x365314 : (hover ? 0x1f2937 : 0x111b10), 1);
+      bg.lineStyle(1.5, this.shovelActive ? 0x86efac : 0xfbbf24, this.shovelActive ? 1 : 0.75);
+      bg.fillRoundedRect(BX, BY, BW, BH, 4);
+      bg.strokeRoundedRect(BX, BY, BW, BH, 4);
+    };
+    draw(false);
+
+    const icon = s.add.graphics().setDepth(36);
+    icon.fillStyle(0xd1d5db, 0.95);
+    icon.fillTriangle(BX + 8, BY + 15, BX + 21, BY + 15, BX + 14, BY + 25);
+    icon.lineStyle(2.5, 0xd1d5db, 1);
+    icon.lineBetween(BX + 14, BY + 17, BX + 23, BY + 8);
+
+    s.add.text(BX + 47, BY + 10, 'SHOVEL', {
+      fontFamily: '"Exo 2", monospace', fontSize: '7px', fontStyle: 'bold', color: '#fef3c7',
+    }).setOrigin(0.5).setDepth(36);
+    s.add.text(BX + 47, BY + 23, '200 P.E.', {
+      fontFamily: '"Exo 2", monospace', fontSize: '8px', fontStyle: 'bold', color: '#fbbf24',
+    }).setOrigin(0.5).setDepth(36);
+
+    const zone = s.add.rectangle(BX + BW / 2, BY + BH / 2, BW, BH, 0, 0)
+      .setDepth(37)
+      .setInteractive({ useHandCursor: true });
+    zone.on('pointerover', () => draw(true));
+    zone.on('pointerout', () => draw(false));
+    zone.on('pointerdown', () => {
+      if (this.isPaused) return;
+      const nextState = !this.shovelActive;
+      if (this.onShovelSelected && this.onShovelSelected(nextState) === false) return;
+      this.setShovelActive(nextState);
+    });
+
+    this.shovelButton = { bg, zone, draw };
+  }
+
+  setShovelActive(active) {
+    this.shovelActive = !!active;
+    if (this.shovelButton) this.shovelButton.draw(false);
   }
 
   _buildCardSlot(cardId, def, claimed, cx, cy, w, h) {
@@ -510,7 +563,7 @@ GW.UIManager = class UIManager {
   //  v1.0.1: renamed from "INVASION TIMELINE", bar shortened
   //  to 400 px and centred, progress smoothly reaches 1.0.
   // ══════════════════════════════════════════════════════════
-  _buildTimeline() {
+  _buildTimeline(levelId) {
     const s   = this.scene;
     const TLY = GW.BOARD.TIMELINE_Y;      // 522
     const TLH = GW.BOARD.TIMELINE_HEIGHT; // 55
@@ -523,19 +576,39 @@ GW.UIManager = class UIManager {
     bg.lineStyle(1, 0x2d3a2d, 0.6);
     bg.lineBetween(0, TLY, W, TLY);
 
-    // Label — updated name
-    s.add.text(6, TLY + 3, 'INVASION PROGRESS', {
+    const LEVEL_W = 132;
+    const GROUP_GAP = 24;
+    const BAR_W = 560;
+    const GROUP_X = Math.floor((W - LEVEL_W - GROUP_GAP - BAR_W) / 2);
+    const BAR_MARGIN = GROUP_X + LEVEL_W + GROUP_GAP;
+
+    const levelPanel = s.add.graphics().setDepth(29);
+    levelPanel.fillStyle(0x0d1a0d, 1);
+    levelPanel.lineStyle(1, 0x4ade80, 0.45);
+    levelPanel.fillRoundedRect(GROUP_X, TLY + 11, LEVEL_W, 34, 4);
+    levelPanel.strokeRoundedRect(GROUP_X, TLY + 11, LEVEL_W, 34, 4);
+    s.add.text(GROUP_X + 10, TLY + 16, 'CURRENT LEVEL', {
       fontFamily: '"Exo 2", monospace',
       fontSize:   '6px',
-      color:      '#4a5a3a',
+      color:      '#86efac',
       letterSpacing: 1,
     }).setDepth(29);
+    this.currentLevelText = s.add.text(GROUP_X + 10, TLY + 27, 'LEVEL ' + (levelId || 1), {
+      fontFamily: '"Exo 2", monospace',
+      fontSize:   '12px',
+      fontStyle:  'bold',
+      color:      '#f0fdf4',
+    }).setDepth(29);
 
-    // ── Progress bar — 400 px wide, centred on screen ─────────────────────
-    const BAR_W = 400;
+    s.add.text(BAR_MARGIN + BAR_W / 2, TLY + 4, 'INVASION TIMELINE', {
+      fontFamily: '"Exo 2", monospace',
+      fontSize:   '7px',
+      color:      '#4a5a3a',
+      letterSpacing: 1,
+    }).setOrigin(0.5, 0).setDepth(29);
+
     const BAR_H = 8;
-    const BAR_MARGIN = Math.floor((W - BAR_W) / 2); // = 280
-    const BAR_Y = TLY + 18;
+    const BAR_Y = TLY + 32;
 
     const barBg = s.add.graphics().setDepth(29);
     barBg.fillStyle(0x0d1a0d, 1);

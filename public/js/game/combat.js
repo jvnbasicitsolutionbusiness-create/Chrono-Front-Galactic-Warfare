@@ -106,7 +106,8 @@ GW.CombatManager = class CombatManager {
     });
 
     this.enemies.forEach(enemy => {
-      if (enemy.alive && Math.abs(enemy.lane - blast.lane) <= 1 && Math.abs(enemy.x - character.x) <= blast.range) {
+      const laneRadius = blast.laneRadius == null ? 1 : blast.laneRadius;
+      if (enemy.alive && Math.abs(enemy.lane - blast.lane) <= laneRadius && Math.abs(enemy.x - character.x) <= blast.range) {
         enemy.takeDamage(blast.damage);
       }
     });
