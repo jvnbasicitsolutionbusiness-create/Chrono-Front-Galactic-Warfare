@@ -667,8 +667,8 @@
         try {
           await client.init();
           var user = window.gwGetUser() || {};
-          await client.saveProgression(user.email || window.GW.progression.state.playerName, window.GW.progression.state);
-        } catch (_) {}
+          if (user.email) await client.saveProgression(user.email, window.GW.progression.state);
+        } catch (error) { console.warn('[Auth] Progress could not be synced before sign-out.', error); }
       }
     }
     if (window.GWNet) { try { await window.GWNet.logout(token); } catch (_) {} }
