@@ -303,6 +303,30 @@ body {
   -webkit-appearance: none;
 }
 
+.auth-password-control {
+  position: relative;
+}
+.auth-password-control .auth-input {
+  padding-right: 62px;
+}
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  min-width: 44px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--clr-primary);
+  font: 700 0.65rem var(--font-ui);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.auth-password-toggle:hover { color: var(--clr-primary-glow); }
+.auth-password-toggle:focus-visible { outline-offset: 0; }
+
 .auth-entry-actions {
   width: min(100%, 430px);
   margin: 12px auto 0;

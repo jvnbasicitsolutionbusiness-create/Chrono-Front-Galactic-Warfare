@@ -148,6 +148,7 @@
   async function init() {
     bindDomRefs();
     bindTabs();
+    bindPasswordToggles();
     bindForms();
     bindEntryChoices();
 
@@ -227,6 +228,21 @@
     regPassword?.addEventListener('input', () => updateStrength(regPassword.value));
     formLogin?.addEventListener('submit',    async e => { e.preventDefault(); await handleLogin(); });
     formRegister?.addEventListener('submit', async e => { e.preventDefault(); await handleRegister(); });
+  }
+
+  function bindPasswordToggles() {
+    document.querySelectorAll('[data-password-toggle]').forEach(button => {
+      const input = document.getElementById(button.getAttribute('aria-controls'));
+      if (!input) return;
+      button.setAttribute('aria-label', 'Show password');
+      button.addEventListener('click', () => {
+        const visible = input.type === 'password';
+        input.type = visible ? 'text' : 'password';
+        button.textContent = visible ? 'HIDE' : 'SHOW';
+        button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+        button.setAttribute('aria-pressed', String(visible));
+      });
+    });
   }
 
   function bindEntryChoices() {

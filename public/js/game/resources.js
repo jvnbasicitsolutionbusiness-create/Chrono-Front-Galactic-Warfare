@@ -2,13 +2,10 @@
  * Garden Warfare: Reborn — Plasma Energy Manager
  *
  * REVISED SYSTEM:
- *  - No continuous auto-regen. Energy comes from:
- *    1. Collecting plasma orbs that spawn on the battlefield (primary source)
- *    2. Kill rewards when an alien enemy is defeated
- *    3. A very slow base generator tick (background trickle)
+ *  - Energy comes from manually collecting plasma orbs and kill rewards.
  *
  *  - PlasmaOrb: individual collectible objects on the game board.
- *  - ResourceManager: owns orb spawning, the slow base tick, and balance.
+ *  - ResourceManager: owns orb spawning and energy balance.
  *
  *  The orb system is modular — future levels can tune spawn rate,
  *  orb value, and lifetime via config.
@@ -64,20 +61,24 @@ GW.PlasmaOrb = class PlasmaOrb {
     this.gfxCore.x = this.x;
     this.gfxCore.y = this.y;
 
-    // Value label
-    this.label = this.scene.add.text(this.x, this.y - 35, `+${this.value} PLASMA`, {
-      fontFamily: 'Exo 2, sans-serif',
-      fontSize:   '12px',
-      fontStyle:  'bold',
-      color:      '#f0fdff',
-      stroke:     '#082f49',
-      strokeThickness: 4,
-      shadow:     { color: '#22d3ee', blur: 10, fill: true },
-    }).setOrigin(0.5, 1).setDepth(11);
+    const levelId = Number(this.scene.levelId);
+    const level = GW.LEVELS && GW.LEVELS[levelId];
+    const showValue = levelId >= 1 && levelId <= 5 && level && level.environment === 'daytime';
+    this.label = showValue
+      ? this.scene.add.text(this.x, this.y - 35, `+${this.value} PLASMA`, {
+        fontFamily: 'Exo 2, sans-serif',
+        fontSize:   '12px',
+        fontStyle:  'bold',
+        color:      '#f0fdff',
+        stroke:     '#082f49',
+        strokeThickness: 4,
+        shadow:     { color: '#22d3ee', blur: 10, fill: true },
+      }).setOrigin(0.5, 1).setDepth(11)
+      : null;
 
     // Idle float animation
     this.scene.tweens.add({
-      targets:  [this.gfxOuter, this.gfxCore, this.label],
+      targets:  [this.gfxOuter, this.gfxCore, this.label].filter(Boolean),
       y:        `-=6`,
       duration: 900,
       ease:     'Sine.easeInOut',
@@ -114,7 +115,7 @@ GW.PlasmaOrb = class PlasmaOrb {
       if (!this.active) return;
       // Blink to warn
       this.scene.tweens.add({
-        targets:  [this.gfxOuter, this.gfxCore, this.label],
+        targets:  [this.gfxOuter, this.gfxCore, this.label].filter(Boolean),
         alpha:    0.3,
         duration: 300,
         yoyo:     true,
@@ -144,14 +145,14 @@ GW.PlasmaOrb = class PlasmaOrb {
 
     // Quick scale-up pop first, then travel to the collector
     this.scene.tweens.add({
-      targets:  [this.gfxOuter, this.gfxCore, this.label],
+      targets:  [this.gfxOuter, this.gfxCore, this.label].filter(Boolean),
       scaleX:   1.4,
       scaleY:   1.4,
       duration: 100,
       ease:     'Power2',
       onComplete: () => {
         this.scene.tweens.add({
-          targets:  [this.gfxOuter, this.gfxCore, this.label],
+          targets:  [this.gfxOuter, this.gfxCore, this.label].filter(Boolean),
           x:        targetX,
           y:        targetY,
           scaleX:   0.3,
@@ -172,7 +173,7 @@ GW.PlasmaOrb = class PlasmaOrb {
     this.active = false;
     if (this._warnTimer)  this._warnTimer.remove(false);
     this.scene.tweens.add({
-      targets:  [this.gfxOuter, this.gfxCore, this.label],
+      targets:  [this.gfxOuter, this.gfxCore, this.label].filter(Boolean),
       alpha:    0,
       duration: 400,
       ease:     'Power1',
@@ -209,7 +210,6 @@ GW.ResourceManager = class ResourceManager {
     this.maxEnergy  = GW.RESOURCES.MAX_ENERGY;
     this._onChange  = null;
     this._orbTimer  = null;
-    this._genTimer  = null;
     this.orbs       = [];    // live PlasmaOrb[]
 
     // Board boundaries for safe orb placement
@@ -223,31 +223,23 @@ GW.ResourceManager = class ResourceManager {
     this._onChange = fn;
   }
 
-  /** Start orb spawning + base generator. Call after scene is ready. */
-  startRegen() {
-    // Random orb spawn: 10–15s between each orb (not fixed interval)
+  /** Start battlefield orb spawning. Call after scene is ready. */
+  startOrbSpawning() {
     this._scheduleNextOrb();
-
-    this._genTimer = this.scene.time.addEvent({
-      delay:         GW.RESOURCES.BASE_GEN_INTERVAL,
-      callback:      () => this.earn(GW.RESOURCES.BASE_GEN_AMOUNT),
-      callbackScope: this,
-      loop:          true,
-    });
   }
 
   _scheduleNextOrb() {
-    // v1.0.1: random plasma spawns every exactly 20 s (ORB_SPAWN_INTERVAL = 20000)
-    const delay = GW.RESOURCES.ORB_SPAWN_INTERVAL || 20000;
+    const min = GW.RESOURCES.ORB_SPAWN_INTERVAL_MIN || GW.RESOURCES.ORB_SPAWN_INTERVAL || 30000;
+    const max = GW.RESOURCES.ORB_SPAWN_INTERVAL_MAX || min;
+    const delay = min + Math.floor(Math.random() * (max - min + 1));
     this._orbTimer = this.scene.time.delayedCall(delay, () => {
       this._spawnOrb();
       this._scheduleNextOrb();
     });
   }
 
-  stopRegen() {
+  stopOrbSpawning() {
     if (this._orbTimer) { this._orbTimer.remove(false); this._orbTimer = null; }
-    if (this._genTimer) { this._genTimer.remove(false); this._genTimer = null; }
     // Destroy any remaining orbs
     this.orbs.forEach((o) => o.destroy());
     this.orbs = [];
@@ -288,9 +280,6 @@ GW.ResourceManager = class ResourceManager {
    *  Player must click it — energy is NOT added automatically. */
   spawnGeneratorOrb(x, y) {
     const R   = GW.RESOURCES;
-    const min = R.REGEN_UNIT_INTERVAL_MIN || 8000;
-    const max = R.REGEN_UNIT_INTERVAL_MAX || 10000;
-    // (interval is managed by Character.genInterval — no timer needed here)
     const orb = new GW.PlasmaOrb(
       this.scene,
       x,

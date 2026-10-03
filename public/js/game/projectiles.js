@@ -42,15 +42,21 @@ GW.Projectile = class Projectile {
   _draw() {
     this.gfx.clear();
     const type = this.weaponDef.projectileType;
-    this.gfx.fillStyle(this.color, 0.25);
+    this.gfx.fillStyle(this.color, 0.12);
+    this.gfx.fillEllipse(-this.size * 1.8, 0, this.size * 5, this.size * 2.5);
+    this.gfx.fillStyle(this.color, 0.3);
     this.gfx.fillCircle(0, 0, this.size + 5);
     this.gfx.fillStyle(this.color, 1);
     if (type === 'laser') {
-      this.gfx.lineStyle(Math.max(2, this.size), this.color, 1);
-      this.gfx.lineBetween(-12, 0, 12, 0);
+      this.gfx.lineStyle(Math.max(3, this.size + 2), this.color, 0.35);
+      this.gfx.lineBetween(-16, 0, 12, 0);
+      this.gfx.lineStyle(Math.max(1.5, this.size), 0xffffff, 0.9);
+      this.gfx.lineBetween(-13, 0, 10, 0);
     } else if (['rocket', 'torpedo', 'explosive', 'gas', 'plasma', 'plasma_cannon', 'cannonball'].includes(type)) {
       this.gfx.fillRoundedRect(-this.size, -this.size * 0.55, this.size * 2.2, this.size * 1.1, 2);
       this.gfx.fillTriangle(this.size * 1.5, 0, this.size * 0.8, -this.size * 0.8, this.size * 0.8, this.size * 0.8);
+      this.gfx.fillStyle(0xffffff, 0.7);
+      this.gfx.fillCircle(-this.size * 0.25, -this.size * 0.15, Math.max(1, this.size * 0.22));
     } else {
       this.gfx.fillCircle(0, 0, this.size);
       this.gfx.fillStyle(0xffffff, 0.55);
@@ -88,6 +94,7 @@ GW.Projectile = class Projectile {
     this.y += (dy / dist) * step;
     this.gfx.x = this.x;
     this.gfx.y = this.y;
+    this.gfx.rotation = Math.atan2(dy, dx);
 
     if (this.x > GW.DISPLAY.BASE_WIDTH + 60 || this.x < -60) {
       this.destroy();
@@ -122,8 +129,16 @@ GW.Projectile = class Projectile {
 
   _spawnHitEffect(x, y) {
     const fx = this.scene.add.graphics().setDepth(25);
-    fx.fillStyle(this.color, 0.8);
-    fx.fillCircle(0, 0, this.size + 8);
+    fx.lineStyle(2, this.color, 0.85);
+    for (let i = 0; i < 8; i++) {
+      const angle = (Math.PI * 2 * i) / 8;
+      fx.beginPath();
+      fx.moveTo(Math.cos(angle) * 3, Math.sin(angle) * 3);
+      fx.lineTo(Math.cos(angle) * (this.size + 12), Math.sin(angle) * (this.size + 12));
+      fx.strokePath();
+    }
+    fx.fillStyle(0xffffff, 0.8);
+    fx.fillCircle(0, 0, Math.max(2, this.size * 0.55));
     fx.x = x; fx.y = y;
     this.scene.tweens.add({
       targets:  fx,

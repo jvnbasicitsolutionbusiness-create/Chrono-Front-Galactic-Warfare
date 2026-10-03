@@ -79,7 +79,6 @@
       minigames:         { btnId: 'btnMiniGames', lockId: 'lockMiniGames' },
       puzzle:            { btnId: 'btnPuzzle',    lockId: 'lockPuzzle'    },
       characters_profile:{ btnId: 'btnProfiles',  lockId: 'lockProfiles'  },
-      extras:            { btnId: 'btnExtras',    lockId: 'lockExtras'    },
     };
 
     Object.entries(lockMap).forEach(([modeId, { btnId, lockId }]) => {
@@ -112,7 +111,9 @@
 
   function _tryOpen(modeId, overlayId) {
     const prog = window.GW && window.GW.progression;
-    if (prog && prog.isModeUnlocked(modeId)) {
+    const configuredUnlocked = window.GW && window.GW.MENU_LOCKS &&
+      window.GW.MENU_LOCKS[modeId] && window.GW.MENU_LOCKS[modeId].unlocked;
+    if (prog ? prog.isModeUnlocked(modeId) : configuredUnlocked) {
       show(overlayId);
     } else {
       _showLocked(modeId);
@@ -129,7 +130,10 @@
     g('btnMiniGames').addEventListener('click', () => _tryOpen('minigames',          'miniGamesOverlay'));
     g('btnPuzzle').addEventListener('click',    () => _tryOpen('puzzle',             'puzzleOverlay'));
     g('btnProfiles').addEventListener('click',  () => _tryOpen('characters_profile', 'profilesOverlay'));
-    g('btnExtras').addEventListener('click',    () => show('extrasOverlay'));
+    g('btnExtras').addEventListener('click',    () => {
+      _buildExtrasCatalog();
+      _tryOpen('extras', 'extrasOverlay');
+    });
 
     // Always unlocked
     g('btnSettings').addEventListener('click', () => show('settingsOverlay'));
@@ -223,7 +227,7 @@
     const prog = window.GW && window.GW.progression;
     if (!el || !prog) return;
     if (prog.isGuest || sessionStorage.getItem('gw_mode') === 'guest') {
-      el.textContent = 'GUEST DEMO  ·  PROGRESS NOT SAVED';
+      el.textContent = 'GUEST DEMO  ·  SAVED UNTIL LOGOUT';
     } else if (!prog.isNewPlayer()) {
       const stats = prog.getStats();
       el.textContent = `Commander: ${stats.playerName}  ·  Level ${stats.currentLevel}  ·  ${stats.cardsCollected}/52 Cards`;
@@ -528,9 +532,13 @@
           (def.id === 'vex_drone'        ? CHAR_PORTRAITS.vex_drone        : null) ||
           (def.id === 'vex_flag_bearer'  ? CHAR_PORTRAITS.vex_flag_bearer  : null);
 
-        const portraitHtml = portraitSvg
-          ? '<div class="char-portrait char-portrait--svg char-portrait--alien">' + portraitSvg + '</div>'
-          : '<div class="char-portrait char-portrait--canvas"><img src="' +
+        const spritePath = window.GW.ASSETS && window.GW.ASSETS.SPRITES && window.GW.ASSETS.SPRITES[def.id];
+        const portraitHtml = spritePath
+          ? '<div class="char-portrait char-portrait--svg char-portrait--alien"><img src="' +
+              spritePath + '" width="56" height="72" alt="' + def.name + '"/></div>'
+          : portraitSvg
+            ? '<div class="char-portrait char-portrait--svg char-portrait--alien">' + portraitSvg + '</div>'
+            : '<div class="char-portrait char-portrait--canvas"><img src="' +
               _drawMiniCanvas(def.color || 0x4c3b7a, def.accentColor || 0x7c6ab5, true) +
               '" width="56" height="72" alt=""/></div>';
 
@@ -550,6 +558,74 @@
       }
       grid.appendChild(el);
     });
+  }
+
+  function _buildExtrasCatalog() {
+    const militaryGrid = g('extrasMilitaryGrid');
+    const aliensGrid = g('extrasAliensGrid');
+    const militaryCount = g('extrasMilitaryCount');
+    const alienCount = g('extrasAlienCount');
+    const prog = window.GW && window.GW.progression;
+    const cards = window.GW && window.GW.CARDS;
+    const enemies = window.GW && window.GW.ENEMIES;
+    if (!militaryGrid || !aliensGrid || !cards || !enemies) return;
+
+    const cardDefs = Object.values(cards);
+    const unlockedCards = cardDefs.filter(card =>
+      prog ? prog.isCardClaimed(card.id) : card.unlockLevel === 'start'
+    );
+    const enemyDefs = Object.values(enemies);
+    const encounteredEnemies = enemyDefs.filter(enemy =>
+      prog ? prog.isEnemyDiscovered(enemy.id) : enemy.introducedLevel === 1
+    );
+
+    militaryGrid.replaceChildren();
+    aliensGrid.replaceChildren();
+    if (militaryCount) militaryCount.textContent = `${unlockedCards.length} / ${cardDefs.length}`;
+    if (alienCount) alienCount.textContent = `${encounteredEnemies.length} / ${enemyDefs.length}`;
+
+    unlockedCards.forEach(card => {
+      const item = document.createElement('article');
+      item.className = 'char-card char-card--unlocked';
+      item.appendChild(_createCatalogPortrait(card.color, card.accentColor, false, card.id));
+      _appendCatalogText(item, 'char-name', card.name);
+      _appendCatalogText(item, 'char-role char-role--' + (card.role || 'offense'), (card.role || card.era || 'Military').toUpperCase());
+      _appendCatalogText(item, 'char-cost', `${card.cost} P.E. · ${card.hp} HP`);
+      const weapon = card.weapon && GW.WEAPONS && GW.WEAPONS[card.weapon];
+      _appendCatalogText(item, 'extras-detail', card.description || (weapon && weapon.description) || 'Military unit available for deployment.');
+      militaryGrid.appendChild(item);
+    });
+
+    encounteredEnemies.forEach(enemy => {
+      const item = document.createElement('article');
+      item.className = 'char-card char-card--alien';
+      item.appendChild(_createCatalogPortrait(enemy.color, enemy.accentColor, true, enemy.id));
+      _appendCatalogText(item, 'char-name', enemy.name);
+      _appendCatalogText(item, 'char-role char-role--alien', (enemy.class || 'Alien').toUpperCase());
+      _appendCatalogText(item, 'char-cost', `${enemy.hp} HP · ${enemy.speed} speed`);
+      _appendCatalogText(item, 'extras-detail', enemy.description || enemy.specialAbility || 'Alien variant encountered in battle.');
+      aliensGrid.appendChild(item);
+    });
+  }
+
+  function _createCatalogPortrait(color, accentColor, isAlien, name) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'char-portrait char-portrait--canvas';
+    const image = document.createElement('img');
+    image.src = _drawMiniCanvas(color || (isAlien ? 0x4c3b7a : 0x4d7c0f), accentColor || (isAlien ? 0x7c6ab5 : 0xa3e635), isAlien);
+    image.width = 56;
+    image.height = 72;
+    image.alt = `${name} portrait`;
+    wrapper.appendChild(image);
+    return wrapper;
+  }
+
+  function _appendCatalogText(parent, className, text) {
+    const element = document.createElement('div');
+    element.className = className;
+    element.textContent = text == null ? '' : String(text);
+    parent.appendChild(element);
+    return element;
   }
 
   // ── Mode grids ────────────────────────────────────────────
@@ -631,6 +707,9 @@
       const control = g(id);
       const key = id === 'graphicsResolution' ? 'resolution' : id;
       if (control) control.value = prog.getSetting(key) || (window.GWGraphics && window.GWGraphics.defaults[key]);
+    });
+    document.querySelectorAll('#settingsOverlay input, #settingsOverlay select').forEach(control => {
+      control.addEventListener('change', _saveSettings);
     });
     if (window.GWGraphics) window.GWGraphics.apply();
   }

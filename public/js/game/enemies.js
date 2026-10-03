@@ -26,6 +26,10 @@ GW.Enemy = class Enemy {
     this.hp       = def.hp;
 
     this.speed    = def.speed;
+    this.spawnDistance = Number(def.spawnDistance ?? GW.ALIEN_APPROACH?.normalizeEnemy(def).spawnDistance ?? 220);
+    this.warningTime   = Number(def.warningTime ?? GW.ALIEN_APPROACH?.normalizeEnemy(def).warningTime ?? 1200);
+    this.timeToImpact  = Number(def.timeToImpact ?? GW.ALIEN_APPROACH?.normalizeEnemy(def).timeToImpact ?? 0);
+    this.effectiveSpeed = Number(def.effectiveSpeed ?? GW.ALIEN_APPROACH?.getEffectiveSpeed(def) ?? this.speed);
     this.damage   = def.damage;          // base damage; scales at low HP
     this.attackCooldown = def.attackCooldown;
     this.reward   = def.reward;
@@ -34,6 +38,7 @@ GW.Enemy = class Enemy {
     this.revealTimer = 0;
     this.slowMultiplier = 1;
     this.slowTimer = 0;
+    this._footstepTimer = 700 + Math.random() * 900;
 
     // Stick-swing state for vex_drone / stick weapon enemies
     this._stickAngle    = 0;    // current swing angle (radians)
@@ -87,6 +92,7 @@ GW.Enemy = class Enemy {
   _build() {
     this.container = this.scene.add.container(this.x, this.y);
     this.container.setDepth(15);
+    if (this.def.isBoss) this.container.setScale(1.5);
     if (this.isStealth) this.container.setAlpha(0.2);
 
     // ── Main enemy graphics — driven by SpriteRegistry ───
@@ -359,7 +365,14 @@ GW.Enemy = class Enemy {
         }
       }
 
-      const moveAmt = (this.speed * this.slowMultiplier * delta) / 1000;
+      const speedScale = GW.ALIEN_APPROACH && GW.ALIEN_APPROACH.MOVE_SCALE ? GW.ALIEN_APPROACH.MOVE_SCALE : 1;
+      const moveAmt = ((this.speed * speedScale) * this.slowMultiplier * delta) / 1000;
+      this.effectiveSpeed = (this.speed * speedScale) * this.slowMultiplier;
+      this._footstepTimer -= delta;
+      if (this._footstepTimer <= 0) {
+        this._footstepTimer = 1200 + Math.random() * 400;
+        if (window.GWAudio) window.GWAudio.play('alien-step');
+      }
       this.x -= moveAmt;
       this.container.x = this.x;
     }
@@ -594,12 +607,14 @@ GW.Enemy = class Enemy {
   _tryDropCurrency() {
     if (!GW.CURRENCY || !this.scene) return;
     if (!this.scene.currencyManager) return;
-    Object.entries(GW.CURRENCY.DROP_CHANCES).forEach(([id, range]) => {
-      const chance = range[0] + Math.random() * (range[1] - range[0]);
-      if (Math.random() <= chance && GW.CURRENCY.TYPES[id]) {
+    let roll = Math.random();
+    for (const [id, chance] of Object.entries(GW.CURRENCY.DROP_CHANCES)) {
+      if (roll < chance && GW.CURRENCY.TYPES[id]) {
         this.scene.currencyManager.spawnDrop(this.x, this.y, GW.CURRENCY.TYPES[id]);
+        return;
       }
-    });
+      roll -= chance;
+    }
   }
 
   destroy() {
@@ -618,15 +633,21 @@ GW.Enemy = class Enemy {
 
 // ─── Enemy Factory ────────────────────────────────────────────────────────────
 GW.EnemyFactory = class EnemyFactory {
-  static create(scene, defId, lane) {
+  static create(scene, defId, lane, options = {}) {
     const def = GW.ENEMIES[defId];
     if (!def) {
       console.warn('[EnemyFactory] Unknown enemy:', defId);
       return null;
     }
-    // Y = lane center (feet will touch ground via drawing offset)
-    const y = GW.BOARD.TOP_OFFSET + (lane - 0.5) * GW.BOARD.LANE_HEIGHT;
-    const x = GW.BOARD.ENEMY_SPAWN_X;
-    return new GW.Enemy(scene, def, lane, x, y);
+    const laneNumber = Number.isInteger(lane) ? lane : GW.LANE_PRESSURE ? GW.LANE_PRESSURE.pickLane(options.waveDef || {}, lane || 1) : 1;
+    const approach = GW.ALIEN_APPROACH ? GW.ALIEN_APPROACH.normalizeEnemy({ ...def, ...options }) : { spawnDistance: 220, warningTime: 1200 };
+    const effectiveDistance = Number(options.spawnDistance ?? def.spawnDistance ?? approach.spawnDistance ?? 220);
+    const y = GW.BOARD.TOP_OFFSET + (laneNumber - 0.5) * GW.BOARD.LANE_HEIGHT;
+    const x = GW.BOARD.ENEMY_SPAWN_X + effectiveDistance;
+    const enemy = new GW.Enemy(scene, { ...def, ...approach, spawnDistance: effectiveDistance, warningTime: Number(options.warningTime ?? def.warningTime ?? approach.warningTime ?? 1200) }, laneNumber, x, y);
+    enemy.spawnDistance = effectiveDistance;
+    enemy.warningTime = Number(options.warningTime ?? def.warningTime ?? approach.warningTime ?? 1200);
+    enemy.timeToImpact = Number(options.timeToImpact ?? def.timeToImpact ?? GW.ALIEN_APPROACH?.getTimeToImpact({ ...def, spawnDistance: effectiveDistance }, effectiveDistance) ?? 0);
+    return enemy;
   }
 };

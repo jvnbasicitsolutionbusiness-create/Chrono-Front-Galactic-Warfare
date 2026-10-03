@@ -33,6 +33,8 @@ GW.UIManager = class UIManager {
     this._cooldowns      = {};
     this.bannerText      = null;
     this.currentLevelText = null;
+    this.runtimeText     = null;
+    this._runtimeDisplayedSeconds = -1;
     this.shovelActive    = false;
     this.shovelButton    = null;
 
@@ -156,7 +158,6 @@ GW.UIManager = class UIManager {
     }).setOrigin(0.5, 0).setDepth(31);
 
     // Update display whenever energy changes (collect orb, spend, kill reward)
-    // Does NOT fire on BASE_GEN_INTERVAL trickle — that is intentionally slow
     this.resourceManager.onChange(energy => {
       if (this.plasmaText) {
         this.plasmaText.setText(String(energy));
@@ -577,10 +578,12 @@ GW.UIManager = class UIManager {
     bg.lineBetween(0, TLY, W, TLY);
 
     const LEVEL_W = 132;
-    const GROUP_GAP = 24;
-    const BAR_W = 560;
-    const GROUP_X = Math.floor((W - LEVEL_W - GROUP_GAP - BAR_W) / 2);
+    const GROUP_GAP = 18;
+    const BAR_W = 520;
+    const TIMER_W = 104;
+    const GROUP_X = Math.floor((W - LEVEL_W - GROUP_GAP - BAR_W - GROUP_GAP - TIMER_W) / 2);
     const BAR_MARGIN = GROUP_X + LEVEL_W + GROUP_GAP;
+    const TIMER_X = BAR_MARGIN + BAR_W + GROUP_GAP;
 
     const levelPanel = s.add.graphics().setDepth(29);
     levelPanel.fillStyle(0x0d1a0d, 1);
@@ -594,6 +597,24 @@ GW.UIManager = class UIManager {
       letterSpacing: 1,
     }).setDepth(29);
     this.currentLevelText = s.add.text(GROUP_X + 10, TLY + 27, 'LEVEL ' + (levelId || 1), {
+      fontFamily: '"Exo 2", monospace',
+      fontSize:   '12px',
+      fontStyle:  'bold',
+      color:      '#f0fdf4',
+    }).setDepth(29);
+
+    const timerPanel = s.add.graphics().setDepth(29);
+    timerPanel.fillStyle(0x0d1a0d, 1);
+    timerPanel.lineStyle(1, 0x4ade80, 0.45);
+    timerPanel.fillRoundedRect(TIMER_X, TLY + 11, TIMER_W, 34, 4);
+    timerPanel.strokeRoundedRect(TIMER_X, TLY + 11, TIMER_W, 34, 4);
+    s.add.text(TIMER_X + 10, TLY + 16, 'RUN TIME', {
+      fontFamily: '"Exo 2", monospace',
+      fontSize:   '6px',
+      color:      '#86efac',
+      letterSpacing: 1,
+    }).setDepth(29);
+    this.runtimeText = s.add.text(TIMER_X + 10, TLY + 27, '0:00', {
       fontFamily: '"Exo 2", monospace',
       fontSize:   '12px',
       fontStyle:  'bold',
@@ -622,10 +643,13 @@ GW.UIManager = class UIManager {
     // Wave flag markers
     this._waveMarkers = [];
     const waveCount = this._totalWaves;
+    const bossMission = !!(GW.LEVELS[levelId] && GW.LEVELS[levelId].isBossLevel && waveCount === 6);
     for (let i = 0; i < waveCount; i++) {
       // v1.0.1 fix: for a single-wave level pct = 1.0 so the marker sits at
       // the far-right end of the bar and progress correctly reaches it.
-      const pct    = waveCount === 1 ? 1 : (i + 1) / waveCount;
+      const pct = bossMission && i < 5
+        ? ((i + 1) * 6) / 35
+        : (waveCount === 1 ? 1 : (i + 1) / waveCount);
       const mx     = BAR_MARGIN + BAR_W * pct;
       const isLast = (i === waveCount - 1);
 
@@ -633,7 +657,7 @@ GW.UIManager = class UIManager {
       marker.fillStyle(isLast ? 0xef4444 : 0xfbbf24, 0.9);
       marker.fillCircle(mx, BAR_Y + BAR_H / 2, isLast ? 6 : 4);
 
-      const wLabel = isLast ? 'FINAL' : ('W' + (i + 1));
+      const wLabel = isLast ? (bossMission ? 'BOSS' : 'FINAL') : ('W' + (i + 1));
       s.add.text(mx, BAR_Y - 3, wLabel, {
         fontFamily: '"Exo 2", monospace',
         fontSize:   '6px',
@@ -726,6 +750,16 @@ GW.UIManager = class UIManager {
         );
       }
     });
+  }
+
+  updateRuntime(elapsedMs) {
+    if (!this.runtimeText) return;
+    const totalSeconds = Math.floor(Math.max(0, elapsedMs) / 1000);
+    if (totalSeconds === this._runtimeDisplayedSeconds) return;
+    this._runtimeDisplayedSeconds = totalSeconds;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, '0');
+    this.runtimeText.setText(minutes + ':' + seconds);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -851,6 +885,7 @@ GW.UIManager = class UIManager {
     if (this.scene.tweens && this.scene.tweens.pauseAll) this.scene.tweens.pauseAll();
     if (this.scene._saveBattleSnapshot) this.scene._saveBattleSnapshot();
     this._buildPauseOverlay();
+    window.dispatchEvent(new Event('gw:pause-open'));
     if (this.onMenuPressed) this.onMenuPressed();
   }
 
@@ -864,6 +899,7 @@ GW.UIManager = class UIManager {
       this._pauseOverlay.destroy(true);
       this._pauseOverlay = null;
     }
+    window.dispatchEvent(new Event('gw:pause-close'));
     if (this.onPauseResume) this.onPauseResume();
   }
 

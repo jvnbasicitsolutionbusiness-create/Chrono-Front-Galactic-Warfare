@@ -6,8 +6,8 @@
  *
  *   fire_lance_gunner       — 10th-century Chinese soldier, bamboo fire-lance
  *   plasma_energy_generator — Sci-fi energy tower, glowing plasma orb
- *   vex_drone               — Common alien infantry, purple body, three pink eyes
- *   vex_flag_bearer         — Pink horde-leader alien, red flag on gold pole
+ *   vex_drone               — Mosskin Scout, moss shell and twin glow-sensors
+ *   vex_flag_bearer         — Ash-grey Signal Bearer with red standard
  *
  * Architecture:
  *   GW.SpriteAnimator  — timer-driven redraw; calls drawFn(g, def, frame, state)
@@ -1528,4 +1528,157 @@ GW.SpriteRegistry.registerEnemy('_default_enemy', (g, def, frame, state) => {
     g.fillStyle(0xffffff, 0.26);
     g.fillRoundedRect(-18 * sw + bx, -42 + by, 36 * sw, 78, 6);
   }
+});
+
+function drawOriginalInvader(g, def, frame, state, kind) {
+  g.clear();
+  const body = def.color || 0x56856c;
+  const light = def.accentColor || _shade(body, 0.35);
+  const dark = _shade(body, -0.55);
+  const eye = def.eyeColor || 0x62f2d1;
+  const f = frame || 0;
+  const bob = state === 'walk' ? Math.sin(f * 0.9) * 2 : Math.sin(f * 0.45) * 1;
+  const stride = state === 'walk' ? Math.sin(f * 0.9) * 3 : 0;
+  const hurt = state === 'hurt' && f % 2 === 0;
+  const dying = state === 'die' && f >= 4;
+  const flag = kind === 'flag';
+  const brute = kind === 'beacon' || kind === 'matriarch' || kind === 'titan';
+  const width = brute ? 1.35 : kind === 'pouncer' ? 0.82 : 1;
+  const cx = state === 'attack' ? 3 : 0;
+  const cy = dying ? 10 : bob;
+
+  g.fillStyle(0x000000, 0.22);
+  g.fillEllipse(cx, 34, brute ? 62 : 46, 10);
+  if (dying) {
+    g.fillStyle(body, 0.75);
+    g.fillEllipse(cx, 16, 48 * width, 16);
+    g.fillStyle(eye, 0.2);
+    g.fillCircle(cx - 10, 12, 3);
+    return;
+  }
+
+  if (kind === 'ion') {
+    g.fillStyle(light, 0.48);
+    g.fillTriangle(-10, -4 + cy, -36, -17 + cy, -25, 10 + cy);
+    g.fillTriangle(10, -4 + cy, 36, -17 + cy, 25, 10 + cy);
+    g.lineStyle(2, eye, 0.7);
+    g.beginPath(); g.moveTo(-10, -4 + cy); g.lineTo(-36, -17 + cy); g.lineTo(-25, 10 + cy); g.strokePath();
+    g.beginPath(); g.moveTo(10, -4 + cy); g.lineTo(36, -17 + cy); g.lineTo(25, 10 + cy); g.strokePath();
+  }
+
+  const legWidth = brute ? 11 : 7;
+  g.fillStyle(dark, 1);
+  g.fillRoundedRect(-13 * width + stride, 12 + cy, legWidth, 22, 3);
+  g.fillRoundedRect(5 * width - stride, 12 + cy, legWidth, 22, 3);
+  g.fillStyle(light, 1);
+  g.fillTriangle(-16 * width + stride, 33 + cy, -20 * width + stride, 39 + cy, -10 * width + stride, 37 + cy);
+  g.fillTriangle(15 * width - stride, 33 + cy, 11 * width - stride, 39 + cy, 21 * width - stride, 37 + cy);
+
+  g.fillStyle(body, 1);
+  g.fillEllipse(cx, 2 + cy, 32 * width, brute ? 34 : 27);
+  g.fillStyle(light, 0.35);
+  g.fillEllipse(cx - 2, -1 + cy, 18 * width, 17);
+
+  if (kind === 'raider') {
+    g.fillStyle(light, 0.95);
+    g.fillTriangle(-11, -25 + cy, -17, -39 + cy, -4, -28 + cy);
+    g.fillTriangle(2, -28 + cy, 8, -43 + cy, 12, -25 + cy);
+    g.fillTriangle(13, -23 + cy, 23, -35 + cy, 20, -18 + cy);
+    g.lineStyle(2, dark, 0.9);
+    g.beginPath(); g.moveTo(-12, -1 + cy); g.lineTo(12, 10 + cy); g.strokePath();
+  }
+  if (kind === 'pouncer' || kind === 'glassback') {
+    g.fillStyle(dark, 0.95);
+    g.fillTriangle(-11, -10 + cy, -18, -25 + cy, -4, -12 + cy);
+    g.fillTriangle(11, -10 + cy, 18, -25 + cy, 4, -12 + cy);
+    g.lineStyle(2, light, 0.85);
+    g.beginPath(); g.moveTo(-12, -4 + cy); g.lineTo(-22, -13 + cy); g.strokePath();
+    g.beginPath(); g.moveTo(12, -4 + cy); g.lineTo(22, -13 + cy); g.strokePath();
+  }
+
+  if (kind === 'titan' || kind === 'matriarch') {
+    g.fillStyle(kind === 'matriarch' ? 0x56c6b4 : light, 0.92);
+    [-14, -7, 0, 7, 14].forEach((x, i) => {
+      const top = kind === 'matriarch' ? -48 - (i % 2) * 8 : -40 - (i % 2) * 6;
+      g.fillTriangle(x + cx, -21 + cy, x - 5 + cx, top + cy, x + 5 + cx, top + cy);
+    });
+  }
+
+  g.lineStyle(brute ? 7 : 5, body, 1);
+  g.beginPath(); g.moveTo(-12 * width, -3 + cy); g.lineTo(-23 * width, 8 + cy); g.strokePath();
+  g.beginPath(); g.moveTo(12 * width, -3 + cy); g.lineTo(22 * width + (state === 'attack' ? 8 : 0), 6 + cy); g.strokePath();
+  g.fillStyle(light, 1);
+  g.fillCircle(-23 * width, 8 + cy, 4);
+  g.fillCircle(22 * width + (state === 'attack' ? 8 : 0), 6 + cy, 4);
+
+  g.fillStyle(body, 1);
+  if (kind === 'beacon') {
+    g.fillRoundedRect(-21, -39 + cy, 42, 26, 12);
+    g.lineStyle(3, light, 0.9);
+    g.strokeEllipse(0, -27 + cy, 48, 38);
+    g.fillStyle(dark, 1);
+    g.fillEllipse(0, -26 + cy, 21, 24);
+    g.fillStyle(eye, 1);
+    g.fillCircle(0, -26 + cy, 7);
+    g.fillStyle(0xffffff, 0.8);
+    g.fillCircle(-2, -28 + cy, 2);
+  } else if (flag) {
+    g.fillEllipse(0, -23 + cy, 36, 30);
+    g.fillStyle(0x05070a, 1);
+    g.fillEllipse(-8, -24 + cy, 10, 14);
+    g.fillEllipse(8, -24 + cy, 10, 14);
+    g.lineStyle(3, 0xc49a45, 1);
+    g.beginPath(); g.moveTo(18, -7 + cy); g.lineTo(20, -58 + cy); g.strokePath();
+    g.fillStyle(0xb92e35, 1);
+    g.fillTriangle(21, -55 + cy, 42, -48 + cy, 21, -40 + cy);
+    g.fillStyle(0xf4d9bd, 0.8);
+    g.fillCircle(28, -48 + cy, 2);
+  } else {
+    g.fillEllipse(0, -23 + cy, kind === 'matriarch' ? 41 : 36, kind === 'matriarch' ? 35 : 29);
+    if (kind === 'glassback') {
+      g.fillStyle(0x8bd9cb, 0.46);
+      g.fillTriangle(-14, -17 + cy, -4, -52 + cy, 5, -18 + cy);
+      g.fillTriangle(-3, -16 + cy, 11, -48 + cy, 15, -15 + cy);
+      g.lineStyle(1.5, 0xc2fff2, 0.75);
+      g.beginPath(); g.moveTo(-4, -50 + cy); g.lineTo(2, -28 + cy); g.lineTo(11, -46 + cy); g.strokePath();
+    } else {
+      g.fillStyle(light, 0.9);
+      g.fillTriangle(-13, -34 + cy, -17, -45 + cy, -5, -35 + cy);
+      g.fillTriangle(13, -34 + cy, 17, -45 + cy, 5, -35 + cy);
+    }
+    if (kind === 'pipkin') {
+      g.fillStyle(light, 0.95);
+      g.fillEllipse(-15, -12 + cy, 9, 6);
+      g.fillEllipse(15, -12 + cy, 9, 6);
+    }
+    g.fillStyle(dark, 1);
+    const sensorY = kind === 'matriarch' ? -23 : -24;
+    g.fillEllipse(-8, sensorY + cy, 9, 12);
+    g.fillEllipse(8, sensorY + cy, 9, 12);
+    g.fillStyle(eye, 0.95);
+    g.fillCircle(-8, sensorY + cy, 3);
+    g.fillCircle(8, sensorY + cy, 3);
+    g.fillStyle(dark, 0.9);
+    g.fillRoundedRect(-7, -12 + cy, 14, 4, 2);
+  }
+
+  if (hurt) {
+    g.fillStyle(0xffffff, 0.3);
+    g.fillEllipse(0, cy - 3, 42 * width, 74);
+  }
+}
+
+[
+  ['vex_drone', 'pipkin'],
+  ['vex_runner', 'pipkin'],
+  ['vex_flag_bearer', 'flag'],
+  ['crater_raider', 'raider'],
+  ['beacon_brute', 'beacon'],
+  ['vanta_pouncer', 'pouncer'],
+  ['glassback_stalker', 'glassback'],
+  ['skyroot_titan', 'titan'],
+  ['ion_wing', 'ion'],
+  ['vex_overlord', 'matriarch'],
+].forEach(([id, kind]) => {
+  GW.SpriteRegistry.registerEnemy(id, (g, def, frame, state) => drawOriginalInvader(g, def, frame, state, kind));
 });

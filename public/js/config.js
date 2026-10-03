@@ -71,27 +71,24 @@ GW.WAVE_TIMELINE = {
 GW.RESOURCES = {
   STARTING_ENERGY:       50,    // 50 plasma at start
   MAX_ENERGY:            9999,
-  // v1.0.1: random orb spawns every exactly 20 seconds
-  ORB_SPAWN_INTERVAL:    20000,
-  ORB_SPAWN_INTERVAL_MIN:20000,
-  ORB_SPAWN_INTERVAL_MAX:20000,
+  // Battlefield plasma and generators follow separate, readable cadences.
+  ORB_SPAWN_INTERVAL:    13500,
+  ORB_SPAWN_INTERVAL_MIN:12000,
+  ORB_SPAWN_INTERVAL_MAX:15000,
   ORB_SPAWN_COUNT:       1,
   ORB_VALUE:             25,
   ORB_LIFETIME:          18000,
   KILL_REWARD_BASE:      10,
-  BASE_GEN_INTERVAL:     120000,
-  BASE_GEN_AMOUNT:       5,
-  // v1.0.1 NERF: PE Generator production interval 15â€“20 seconds (was 10â€“12)
-  REGEN_UNIT_INTERVAL:   17500, // midpoint default; actual randomized per cycle
-  REGEN_UNIT_INTERVAL_MIN: 15000,
-  REGEN_UNIT_INTERVAL_MAX: 20000,
+  REGEN_UNIT_INTERVAL:   10000, // midpoint; production timing is randomized below
+  REGEN_UNIT_INTERVAL_MIN: 8000,
+  REGEN_UNIT_INTERVAL_MAX: 12000,
   REGEN_UNIT_AMOUNT:     25,
 };
 
 // â”€â”€â”€ Galactic Currency System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.CURRENCY = {
-  // Independent drop chances per kill; a kill can produce more than one type.
-  DROP_CHANCES: { silver_coin: [0.50, 0.50], gold_coin: [0.30, 0.30], emerald: [0.15, 0.15], diamond: [0.10, 0.10], coin_bag: [0.05, 0.05] },
+  // Mutually exclusive per-kill odds; a kill can drop at most one currency type.
+  DROP_CHANCES: { silver_coin: 0.15, gold_coin: 0.08, emerald: 0.04, diamond: 0.02, coin_bag: 0.01 },
   // Currency types with their values
   TYPES: {
     silver_coin: { id: 'silver_coin',  name: 'Silver Galactic Coin', value: 1,  color: 0xc0c0c0, glowColor: 0xe8e8ff },
@@ -104,17 +101,76 @@ GW.CURRENCY = {
   FLOAT_DURATION:  800,    // ms for collection float animation
 };
 
+GW.DIFFICULTY_PACING = {
+  easy:       { durationRangeMinutes: [9, 11], durationMs: 10 * 60 * 1000, individualInterval: [10000, 15000], waveIntervals: [[1500, 2500]], scoutCountRange: [15, 20], assaultCountRange: [20, 30] },
+  moderate:   { durationRangeMinutes: [14, 18], durationMs: 16 * 60 * 1000, individualInterval: [12000, 20000], waveIntervals: [[1500, 2500], [2000, 3000]], scoutCountRange: [15, 20], assaultCountRange: [20, 30] },
+  medium:     { durationRangeMinutes: [20, 25], durationMs: 22.5 * 60 * 1000, individualInterval: [14000, 23000], waveIntervals: [[1200, 2200], [1500, 2500], [2000, 3000]], scoutCountRange: [20, 25], assaultCountRange: [20, 30] },
+  hard:       { durationRangeMinutes: [30, 40], durationMs: 35 * 60 * 1000, individualInterval: [18000, 29000], waveIntervals: [[1000, 2000], [1200, 2200], [1500, 2500], [2000, 3000]], scoutCountRange: [25, 30], assaultCountRange: [20, 30] },
+  expert:     { durationRangeMinutes: [45, 60], durationMs: 52.5 * 60 * 1000, individualInterval: [26000, 39000], waveIntervals: [[900, 1800], [1000, 2000], [1200, 2200], [1500, 2500], [2000, 3000]], scoutCountRange: [30, 30], assaultCountRange: [25, 35] },
+  impossible: { durationRangeMinutes: [30, 35], durationMs: 35 * 60 * 1000, assaultDurationMs: 30 * 60 * 1000, bossDurationMs: 5 * 60 * 1000, individualInterval: [34000, 36000], waveIntervals: [[34000, 36000]], interval: [34000, 36000], scoutCountRange: [3, 3], assaultCountRange: [12, 12] },
+};
+
 // â”€â”€â”€ Wave System â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.WAVES = {
   BETWEEN_WAVE_DELAY:  9000,    // 8-10s pause between pre-wave and assault wave
-  SPAWN_DELAY:         40000,   // midpoint of the 30-50s alien approach interval
+  SPAWN_DELAY:         40000,   // fallback spawn delay for non-campaign modes
   INITIAL_DELAY:       20000,   // 20s before first alien appears (player prep time)
   PRESSURE_DELAY:      40000,
-  APPROACH_INTERVAL:   [30000, 50000],
+  APPROACH_INTERVAL:   [30000, 50000], // fallback interval; campaign uses DIFFICULTY_PACING
   SPAWN_GROUP_CHANCES: { SINGLE: 0.75, TRIPLE_WITHIN_MULTI: 0.5 },
   chooseGroupSize(remaining) {
     if (Math.random() < this.SPAWN_GROUP_CHANCES.SINGLE) return 1;
     return Math.min(Math.random() < this.SPAWN_GROUP_CHANCES.TRIPLE_WITHIN_MULTI ? 3 : 2, remaining);
+  },
+};
+
+GW.LANE_PRESSURE = {
+  DEFAULT_PROFILE: { 1: 0.20, 2: 0.24, 3: 0.30, 4: 0.16, 5: 0.10 },
+  pickLane(waveDef = {}, fallbackLane = 1) {
+    const profile = waveDef && waveDef.lanePressure ? waveDef.lanePressure : this.DEFAULT_PROFILE;
+    const lanes = [1, 2, 3, 4, 5];
+    const total = lanes.reduce((sum, lane) => sum + (Number(profile[lane]) || 0), 0);
+    if (!total) return Number.isInteger(fallbackLane) ? fallbackLane : 1;
+    let roll = Math.random() * total;
+    for (const lane of lanes) {
+      roll -= Number(profile[lane]) || 0;
+      if (roll <= 0) return lane;
+    }
+    return lanes[lanes.length - 1];
+  },
+};
+
+GW.ALIEN_APPROACH = {
+  MOVE_SCALE: 1,
+  FALLBACK_SPAWN_DISTANCE: 220,
+  FALLBACK_WARNING_TIME: 1200,
+  LEVEL_CLASS_DEFAULTS: {
+    basic:   { spawnDistance: 220, warningTime: 1500 },
+    fast:    { spawnDistance: 180, warningTime: 1200 },
+    armored: { spawnDistance: 260, warningTime: 1800 },
+    boss:    { spawnDistance: 360, warningTime: 2200 },
+  },
+  getEffectiveSpeed(enemyDef = {}) {
+    const baseSpeed = Number(enemyDef.speed) || 20;
+    return baseSpeed * (GW.ALIEN_APPROACH.MOVE_SCALE || 1);
+  },
+  getTimeToImpact(enemyDef = {}, spawnDistance) {
+    const distance = Number(spawnDistance ?? enemyDef.spawnDistance ?? this.FALLBACK_SPAWN_DISTANCE) || this.FALLBACK_SPAWN_DISTANCE;
+    const speed = this.getEffectiveSpeed(enemyDef);
+    return Math.max(0.5, distance / Math.max(1, speed) * 1000);
+  },
+  normalizeEnemy(def = {}) {
+    const category = (def.class || 'basic').toLowerCase();
+    const defaults = this.LEVEL_CLASS_DEFAULTS[category] || this.LEVEL_CLASS_DEFAULTS.basic;
+    const spawnDistance = Number(def.spawnDistance ?? defaults.spawnDistance ?? this.FALLBACK_SPAWN_DISTANCE);
+    const warningTime = Number(def.warningTime ?? defaults.warningTime ?? this.FALLBACK_WARNING_TIME);
+    return {
+      spawnDistance,
+      warningTime,
+      movementSpeed: Number(def.speed) || 20,
+      effectiveSpeed: this.getEffectiveSpeed(def),
+      timeToImpact: this.getTimeToImpact(def, spawnDistance),
+    };
   },
 };
 
@@ -299,7 +355,7 @@ GW.ALIEN_EQUIPMENT = {
   },
   bicycle: {
     id: 'bicycle', name: 'Bicycle Alien', tier: 3,
-    extraHp: 50, speedMult: 1.4, equipColor: 0x0f766e, equipName: 'Bicycle',
+    extraHp: 50, speedMult: 2.0, equipColor: 0x0f766e, equipName: 'Bicycle',
   },
   newspaper: {
     id: 'newspaper', name: 'Newspaper Alien', tier: 3,
@@ -375,9 +431,9 @@ GW.WEAPONS = {
   // v1.0.1: fire_lance range extended so ranged attackers can target enemies in alien zone
   fire_lance: {
     id: 'fire_lance', name: 'Fire Lance', era: 'early',
-    damage: 10, attackSpeed: 2500, range: 900, projectileSpeed: 380,
+    damage: 20, attackSpeed: 2200, range: 900, projectileSpeed: 380,
     projectileColor: 0xff6b00, projectileSize: 5, projectileType: 'fire',
-    description: '10th-century Chinese fire-lance. Long range. 10 damage per shot.',
+    description: '10th-century Chinese fire-lance. Long range. 20 damage per shot.',
   },
   hand_cannon: {
     id: 'hand_cannon', name: 'Hand Cannon', era: 'early',
@@ -500,11 +556,10 @@ GW.CARDS = {
     hp: 50, weapon: null, damage: 0, attackSpeed: 0, range: 0,
     cost: 50, unlockLevel: 'start', isBossReward: false,
     rarity: 'common',
-    // v1.0.1 NERF: deploy cooldown 10s (was 7.5s)
     deployCooldown: 10000,
     color: 0xf59e0b, accentColor: 0xfef3c7,
-    isSupport: true, genInterval: 17500, genAmount: 25,
-    description: 'Common Plasma Energy Generator. Generates 25 Plasma every 15â€“20 seconds.',
+    isSupport: true, genInterval: 10000, genAmount: 25,
+    description: 'Common Plasma Energy Generator. Generates 25 Plasma every 8â€“12 seconds.',
     environment: 'all',
     strengthsText: 'Essential resource production.',
     weaknessesText: 'Cannot defend itself. Aliens will attack it.',
@@ -513,19 +568,18 @@ GW.CARDS = {
   fire_lancer: {
     id: 'fire_lancer', name: 'Fire-Lancer',
     era: 'early_10c', role: 'offense', cardSlot: 'start_2',
-    // v1.0.1 NERF: HP reduced from 80 to 75
-    hp: 75, weapon: 'fire_lance', damage: 10, attackSpeed: 2500, range: 900,
-    cost: 100, unlockLevel: 'start', isBossReward: false,
+    hp: 100, weapon: 'fire_lance', damage: 20, attackSpeed: 2200, range: 900,
+    cost: 50, unlockLevel: 'start', isBossReward: false,
     rarity: 'common',
     // v1.0.1 NERF: deploy cooldown 10s (was 7.5s)
     deployCooldown: 10000,
     color: 0x7c3d0a, accentColor: 0xff6b00,
     helmetColor: 0x3d1a00, skinColor: 0xd4956a,
     isSupport: false,
-    description: '10th-century Chinese fire-lance soldier. 10 damage per shot. Costs 100 Plasma.',
+    description: '10th-century Chinese fire-lance soldier. 20 damage per shot. Costs 50 Plasma.',
     environment: 'daytime',
     strengthsText: 'Low cost. Long range. First ranged attacker.',
-    weaknessesText: 'Only 10 damage per shot. ~10 shots to kill 100 HP alien.',
+    weaknessesText: 'Needs support to handle a large horde alone.',
   },
 
   // â•â•â• LEVEL 1 REWARD â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1210,10 +1264,13 @@ GW.CARD_ABILITY_RULES = {
     const tier = tiers.find(entry => level <= entry.maxLevel);
     card.rarity = tier.rarity;
     const [minHp, maxHp] = tier.hp;
-    if (card.hp < minHp || card.hp > maxHp) {
+    if (card.id === 'fire_lancer') {
+      // Preserve a durable, affordable starting attacker through tier normalization.
+      card.hp = 100;
+    } else if (card.hp < minHp || card.hp > maxHp) {
       card.hp = minHp + ((Math.imul(level + card.id.length, 37) >>> 0) % (maxHp - minHp + 1));
     }
-    if (tier.rarity === 'common') card.cost = card.id === 'plasma_energy_generator' ? 50 : 100;
+    if (tier.rarity === 'common')     card.cost = ['plasma_energy_generator', 'fire_lancer'].includes(card.id) ? 50 : 100;
     else if (tier.rarity === 'uncommon') card.cost = 120;
     else if (tier.rarity === 'rare') card.cost = 150 + (level % 6) * 10;
     else if (tier.rarity === 'very_rare') card.cost = 250;
@@ -1255,30 +1312,27 @@ Object.defineProperty(GW, 'CHARACTERS', {
 
 // â”€â”€â”€ Alien Enemy Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 GW.ENEMIES = {
-  // LEVEL 1: Common Alien
+  // Original common alien: moss-toned shell and twin glow-sensors.
   vex_drone: {
-    id: 'vex_drone', name: 'Vex Drone', class: 'basic', tier: 1,
-    // v1.0.3: HP 200; speed 0.75x baseline = 9px/s
-    hp: 200, speed: 9, damage: 20, attackCooldown: 2500, reward: 10,
-    color: 0x7c3aed, accentColor: 0xc4b5fd, eyeColor: 0x00ff88,
-    description: 'Common alien. Uses purple stick for melee. 200 HP. Damage scales with low HP.',
+    id: 'vex_drone', name: 'Mosskin Scout', class: 'basic', tier: 1, rarity: 'common',
+    // Common aliens use the 12px/s baseline (1.0x).
+    hp: 200, speed: 12, damage: 20, attackCooldown: 2500, reward: 10,
+    color: 0x56856c, accentColor: 0xa5c98c, eyeColor: 0x62f2d1,
+    description: 'Common alien scout with a living moss shell and bright sensory eyes.',
     specialAbility: null, introducedLevel: 1,
     equipment: 'bare',
-    // Stick-swing weapon
-    weaponType: 'stick',
-    stickColor: 0x9333ea,
   },
   // FLAG variant â€” pinkish horde leader
   vex_flag_bearer: {
-    id: 'vex_flag_bearer', name: 'Flag Bearer', class: 'fast', tier: 1,
-    // v1.0.3: speed 0.90x baseline = 10.8px/s (flag bearer leads each wave horde)
+    id: 'vex_flag_bearer', name: 'Signal Bearer', class: 'fast', tier: 1, rarity: 'special',
+    // Horde leader variant is slightly slower than the 12px/s baseline.
     hp: 200, speed: 10.8, damage: 20, attackCooldown: 2500, reward: 30,
-    color: 0xe879f9, accentColor: 0xfbbf24, eyeColor: 0xfbbf24,
-    description: 'Carries invasion flag. 0.90× baseline speed. Leads the horde charge.',
+    color: 0x9aa7ae, accentColor: 0xcbd5d9, eyeColor: 0x090d12,
+    description: 'Ash-grey scout with dark glass eyes, carrying a red signal standard.',
     specialAbility: 'flag_rush', introducedLevel: 1, isFlag: true,
   },
   vex_runner: {
-    id: 'vex_runner', name: 'Vex Runner', class: 'fast', tier: 2,
+    id: 'vex_runner', name: 'Mosskin Sprinter', class: 'fast', tier: 2, rarity: 'common',
     hp: 40, speed: 30, damage: 8, attackCooldown: 1800, reward: 25,
     color: 0xf59e0b, accentColor: 0xfef3c7, eyeColor: 0xff6b00,
     description: 'Fast alien. Low health, rapid movement.',
@@ -1342,10 +1396,11 @@ GW.ENEMIES = {
   },
   vex_overlord: {
     id:            'vex_overlord',
-    name:          'Doctor Malgaroth',
+    name:          'The Rift Matriarch',
     class:         'boss',
     tier:          6,
-    hp:            100000,
+    rarity:        'mythical',
+    hp:            50000,
     speed:         6,
     damage:        50,
     attackCooldown:1200,
@@ -1353,7 +1408,7 @@ GW.ENEMIES = {
     color:         0x0f172a,
     accentColor:   0x818cf8,
     eyeColor:      0x6366f1,
-    description:   'Doctor Malgaroth, the final radioactive invasion boss. 100,000 HP.',
+    description:   'The Rift Matriarch, an ancient radioactive hive-guardian. 50,000 HP.',
     specialAbility: 'boss_phase',
     introducedLevel: 50,
     isBoss:        true,
@@ -1369,6 +1424,50 @@ GW.ENEMIES = {
 // 12px/s baseline (vex_drone). Not all may be implemented in combat yet â€”
 // this registers them so wave generator and future scenes can reference them.
 GW.ENEMY_CATEGORIES = {
+
+  crater_raider: {
+    id: 'crater_raider', name: 'Crater Raider', class: 'uncommon', tier: 2, rarity: 'uncommon',
+    hp: 320, speed: 14, damage: 14, attackCooldown: 2100, reward: 35,
+    color: 0xb65d3a, accentColor: 0xe3a06c, eyeColor: 0xffd36b,
+    description: 'A rust-shelled scavenger that raids in coordinated bursts.',
+    specialAbility: 'charge', introducedLevel: 6,
+  },
+  beacon_brute: {
+    id: 'beacon_brute', name: 'Beacon Brute', class: 'brute', tier: 3, rarity: 'rare',
+    hp: 1200, speed: 8, damage: 30, attackCooldown: 2500, reward: 100,
+    color: 0x5b9f59, accentColor: 0xa3d477, eyeColor: 0xffdf73,
+    description: 'A towering, single-lensed guardian protected by a living glass shell.',
+    specialAbility: 'armor', introducedLevel: 16,
+  },
+  vanta_pouncer: {
+    id: 'vanta_pouncer', name: 'Vanta Pouncer', class: 'elite', tier: 4, rarity: 'very-rare',
+    hp: 850, speed: 25, damage: 28, attackCooldown: 1700, reward: 125,
+    color: 0x253340, accentColor: 0x668394, eyeColor: 0xff5a72,
+    description: 'A silent, long-limbed ambusher marked by luminous sensory fins.',
+    specialAbility: 'leap', introducedLevel: 25,
+  },
+  glassback_stalker: {
+    id: 'glassback_stalker', name: 'Glassback Stalker', class: 'elite', tier: 5, rarity: 'ultra-rare',
+    hp: 980, speed: 18, damage: 34, attackCooldown: 1900, reward: 160,
+    color: 0x252c3b, accentColor: 0x8a9db1, eyeColor: 0x65f0d2,
+    description: 'A segmented, obsidian-toned hunter with a translucent dorsal crest.',
+    specialAbility: 'stealth', introducedLevel: 32,
+  },
+  skyroot_titan: {
+    id: 'skyroot_titan', name: 'Skyroot Titan', class: 'advanced', tier: 6, rarity: 'legendary',
+    hp: 2600, speed: 10, damage: 38, attackCooldown: 2300, reward: 260,
+    color: 0x477e72, accentColor: 0xb2c982, eyeColor: 0xf4cc70,
+    description: 'A towering spore-crowned alien whose luminous frills signal its approach.',
+    specialAbility: 'stomp', introducedLevel: 41,
+  },
+  ion_wing: {
+    id: 'ion_wing', name: 'Ion Wing', class: 'aerial', tier: 6, rarity: 'legendary',
+    hp: 1800, speed: 22, damage: 26, attackCooldown: 1800, reward: 220,
+    color: 0x4d6687, accentColor: 0xb0d8ed, eyeColor: 0x72f6ff,
+    description: 'A gliding bio-electric scout with broad, translucent fins.',
+    specialAbility: 'hover', introducedLevel: 43,
+    isAerial: true,
+  },
 
   // â”€â”€ UNCOMMON (faster than common, introduced in mid-game) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   vex_agile: {
@@ -1490,10 +1589,20 @@ GW.ENEMY_CATEGORIES = {
 // Merge ENEMY_CATEGORIES into GW.ENEMIES for backwards compat
 // (Future: EnemyFactory can resolve from both maps)
 Object.assign(GW.ENEMIES, GW.ENEMY_CATEGORIES);
+Object.values(GW.ENEMIES).forEach(enemy => {
+  if (!enemy || typeof enemy !== 'object') return;
+  const defaults = GW.ALIEN_APPROACH.normalizeEnemy(enemy);
+  enemy.spawnDistance = Number(enemy.spawnDistance ?? defaults.spawnDistance);
+  enemy.warningTime = Number(enemy.warningTime ?? defaults.warningTime);
+  enemy.movementSpeed = Number(enemy.movementSpeed ?? enemy.speed ?? defaults.movementSpeed ?? 20);
+  enemy.effectiveSpeed = Number(enemy.effectiveSpeed ?? defaults.effectiveSpeed ?? GW.ALIEN_APPROACH.getEffectiveSpeed(enemy));
+  enemy.timeToImpact = Number(enemy.timeToImpact ?? defaults.timeToImpact ?? GW.ALIEN_APPROACH.getTimeToImpact(enemy, enemy.spawnDistance));
+  enemy.speedScale = Number(enemy.speedScale ?? 1);
+});
 
 Object.values(GW.ENEMIES).forEach(enemy => {
   if (enemy.id === 'vex_overlord') {
-    enemy.hp = 100000;
+    enemy.hp = 50000;
     return;
   }
   if (enemy.isFlag) return;
@@ -1504,7 +1613,7 @@ Object.values(GW.ENEMIES).forEach(enemy => {
   } else if (enemy.class === 'advanced' || enemy.class === 'aerial' || enemy.class === 'vehicle') {
     enemy.hp = Math.max(1000, Math.min(5000, enemy.hp));
   } else if (enemy.class === 'brute') {
-    enemy.hp = Math.max(5000, Math.min(10000, enemy.hp));
+    enemy.hp = Math.max(1000, Math.min(2500, enemy.hp));
   } else {
     enemy.hp = Math.max(250, Math.min(500, enemy.hp));
   }
@@ -1575,6 +1684,8 @@ GW.ENVIRONMENTS = {
 // â”€â”€â”€ Level Definitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 (function _buildLevels() {
   const L = {};
+  const levelOneIndividualInterval = [10000, 15000];
+  const levelOneHordeInterval = [1500, 2500];
 
   // Helper: get environment id for level
   function envForLevel(id) {
@@ -1589,7 +1700,7 @@ GW.ENVIRONMENTS = {
   L[1] = {
     id: 1, name: 'First Light', environment: envForLevel(1),
     unlocked: true, completed: false, difficulty: 'easy',
-    startingEnergy: 0,
+    durationMs: GW.DIFFICULTY_PACING.easy.durationMs,
     availableDefenders: ['plasma_energy_generator', 'fire_lancer'],
     availableEnemies:   ['vex_drone', 'vex_flag_bearer'],
     sentinelAvailable:  true,
@@ -1605,7 +1716,7 @@ GW.ENVIRONMENTS = {
       // halfHpChain:true â€” WaveManager will spawn the NEXT scout only when the
       // PREVIOUS one reaches half HP, rather than using fixed delay offsets.
       // Lanes are randomised (not staircase) so aliens appear unpredictably.
-      { id: 'scouts', label: 'SCOUTS', approachInterval: GW.WAVES.APPROACH_INTERVAL, enemies: [
+      { id: 'scouts', label: 'SCOUTS', approachInterval: levelOneIndividualInterval, enemies: [
         { type: 'vex_drone', lane: 3, delay: 0 },
         { type: 'vex_drone', lane: 1, delay: 0 },
         { type: 'vex_drone', lane: 5, delay: 0 },
@@ -1632,7 +1743,7 @@ GW.ENVIRONMENTS = {
       // before spawning the 20 drones so the player has time to react.
       // Drones are spread across random lanes so they form a visible line,
       // not a staircase. Flag Bearer (1.5Ã— speed) leads from lane 3.
-      { id: 'horde', label: 'THE HORDE', isHorde: true, warningDelay: 3000, isMajorWave: true, isFinalWave: true, enemies: [
+      { id: 'horde', label: 'THE HORDE', isHorde: true, warningDelay: 3000, spawnInterval: levelOneHordeInterval, isMajorWave: true, isFinalWave: true, enemies: [
         { type: 'vex_flag_bearer', lane: 3, delay: 0 },   // leads â€” 1.5Ã— speed, pinkish
         { type: 'vex_drone', lane: 1, delay: 0 },
         { type: 'vex_drone', lane: 2, delay: 0 },
@@ -1724,7 +1835,9 @@ GW.ENVIRONMENTS = {
       unlocked: false,
       completed: false,
       difficulty: d.diff,
-      startingEnergy: 0,
+      durationMs: GW.DIFFICULTY_PACING[d.diff].durationMs,
+      assaultDurationMs: GW.DIFFICULTY_PACING[d.diff].assaultDurationMs || null,
+      bossDurationMs: GW.DIFFICULTY_PACING[d.diff].bossDurationMs || null,
       availableDefenders: ['plasma_energy_generator', 'fire_lancer'],
       availableEnemies:   ['vex_drone'],
       sentinelAvailable:  true,
@@ -1745,11 +1858,7 @@ GW.ENVIRONMENTS = {
   //  Generates wave[] data for levels 2-50, survival, endless, puzzle,
   //  mini-games.
   //
-  //  TIMING RULES (from spec):
-  //  â”€ Pre-wave / scout phase:  12â€“20s between individual alien spawns
-  //  â”€ Assault wave:            15â€“30 aliens total, each 4â€“6s apart
-  //    (so never simultaneous â€” still staggered, feels like a surge)
-  //  â”€ Between waves:           GW.WAVES.BETWEEN_WAVE_DELAY (12s)
+  // Campaign pacing is configured by difficulty; non-campaign modes use fallback intervals.
   //
   //  ALIEN TYPE PROGRESSION by level tier:
   //  â”€ Easy     (L2â€“10):  bare, cap
@@ -1808,9 +1917,13 @@ GW.ENVIRONMENTS = {
     return (Math.abs(h) % 5) + 1;
   }
 
+  function pickWaveLane(seed, index) {
+    return ((Math.abs(seed) % 5 + index) % 5) + 1;
+  }
+
   /**
    * Scout delay: cumulative ms from wave start.
-  * Each scout approach gets a 30-50s gap from the previous.
+  * Campaign gaps come from the difficulty spawn profile; this fallback is for other modes.
    * Uses deterministic pseudo-random (seed-based) so values are consistent.
    */
   function scoutDelays(count, seed, spawnProfile) {
@@ -1821,7 +1934,8 @@ GW.ENVIRONMENTS = {
       const groupSize = GW.WAVES.chooseGroupSize(count - i);
       for (let member = 0; member < groupSize && i < count; member++, i++) delays.push(acc);
       if (spawnProfile) {
-        acc += spawnProfile.interval[0] + Math.floor(Math.random() * (spawnProfile.interval[1] - spawnProfile.interval[0] + 1));
+        const interval = spawnProfile.individualInterval || spawnProfile.interval;
+        acc += interval[0] + Math.floor(Math.random() * (interval[1] - interval[0] + 1));
       } else {
         const r = ((seed + groupStart * 7919) * 1664525 + 1013904223) % 2147483648;
         const [minDelay, maxDelay] = GW.WAVES.APPROACH_INTERVAL;
@@ -1832,7 +1946,7 @@ GW.ENVIRONMENTS = {
   }
 
   /**
-  * Assault wave delays: 15-30 aliens, each 30-50s apart from the previous.
+  * Assault wave fallback delays for non-campaign modes.
    * Returns array of cumulative ms delays from wave start.
    */
   function assaultDelays(count, seed) {
@@ -1862,34 +1976,43 @@ GW.ENVIRONMENTS = {
     const diff = Math.min(difficulty, 5);
     const tierRanges = [[1,6],[7,14],[15,23],[24,35],[36,49],[50,50]];
     const [tierMin, tierMax] = tierRanges[diff] || [1, 50];
-    const approachRanges = [[20, 25], [15, 20], [20, 25], [25, 30], [30, 30], [30, 30]];
-    const [approachMin, approachMax] = approachRanges[diff];
+    const approachRange = spawnProfile && spawnProfile.scoutCountRange
+      ? spawnProfile.scoutCountRange
+      : [[20, 25], [15, 20], [20, 25], [25, 30], [30, 30], [30, 30]][diff];
+    const [approachMin, approachMax] = approachRange;
     const tierProgress = Math.max(0, Math.min(1, (levelId - tierMin) / Math.max(1, tierMax - tierMin)));
     const scoutCount = Math.round(approachMin + tierProgress * (approachMax - approachMin));
     const enemyTypeForLevel = () => {
-      if (levelId < 6) return 'vex_drone';
-
-      const commonVariants = levelId < 11
-        ? ['vex_runner']
-        : ['vex_drone', 'vex_runner', 'vex_jetpack', 'vex_tiny_ship', 'vex_hover_bike', 'vex_vehicle_rider'];
-
-      if (levelId < 11) {
-        return Math.random() < 0.6
-          ? commonVariants[0]
-          : 'vex_drone';
-      }
-
-      const commonChance = levelId < 21 ? 0.75 : 0.6;
-      const eliteChance = 0.25;
-      const advancedChance = levelId >= 21 ? 0.15 : 0;
       const roll = Math.random();
-
-      if (roll < commonChance) return commonVariants[Math.floor(Math.random() * commonVariants.length)];
-      if (roll < commonChance + eliteChance) return 'vex_elite';
-
-      const advancedVariants = levelId >= 25 ? ['vex_advanced', 'vex_colossus'] : ['vex_advanced'];
-      if (advancedChance > 0) return advancedVariants[Math.floor(Math.random() * advancedVariants.length)];
-      return commonVariants[Math.floor(Math.random() * commonVariants.length)];
+      // Mutually exclusive rarity bands: common variants lead at 75%, then
+      // the introduced uncommon raiders lead at 72% before later tiers open.
+      if (levelId < 4) return 'vex_drone';
+      if (levelId < 6) return roll < 0.75 ? 'vex_drone' : 'vex_runner';
+      if (levelId < 16) return roll < 0.72 ? 'crater_raider' : (roll < 0.86 ? 'vex_drone' : 'vex_runner');
+      if (levelId < 25) {
+        if (roll < 0.72) return 'crater_raider';
+        if (roll < 0.92) return 'beacon_brute';
+        return 'vex_drone';
+      }
+      if (levelId < 32) {
+        if (roll < 0.58) return 'crater_raider';
+        if (roll < 0.84) return 'beacon_brute';
+        if (roll < 0.96) return 'vanta_pouncer';
+        return 'vex_drone';
+      }
+      if (levelId < 41) {
+        if (roll < 0.40) return 'crater_raider';
+        if (roll < 0.66) return 'beacon_brute';
+        if (roll < 0.86) return 'vanta_pouncer';
+        if (roll < 0.98) return 'glassback_stalker';
+        return 'vex_drone';
+      }
+      if (roll < 0.34) return 'crater_raider';
+      if (roll < 0.54) return 'beacon_brute';
+      if (roll < 0.71) return 'vanta_pouncer';
+      if (roll < 0.83) return 'glassback_stalker';
+      if (roll < 0.95) return 'skyroot_titan';
+      return 'ion_wing';
     };
 
     // Base assault size per difficulty tier â€” scales up within each tier by level.
@@ -1912,7 +2035,7 @@ GW.ENVIRONMENTS = {
     const preEnemies = preDelays.map(function(delay, i) {
       return {
         type:      enemyTypeForLevel(i),
-        lane:      pickLane(seed + i),
+        lane:      pickWaveLane(seed, i),
         delay:     delay,
         equipment: pickEquip(pool, seed + i * 1000),
       };
@@ -1923,18 +2046,21 @@ GW.ENVIRONMENTS = {
     for (let w = 0; w < numWaves; w++) {
       const isFinal  = w === numWaves - 1;
       const waveSeed = seed + (w + 1) * 99991;
-      const waveSize = diff >= 4 ? 25 + ((levelId + w) % 11) : 20 + ((levelId + w) % 11);
-      const flagCount = diff >= 4 && isFinal ? 2 : 1;
+      const assaultRange = spawnProfile && spawnProfile.assaultCountRange;
+      const waveSize = assaultRange
+        ? assaultRange[0] + ((levelId + w) % (assaultRange[1] - assaultRange[0] + 1))
+        : (diff >= 4 ? 25 + ((levelId + w) % 11) : 20 + ((levelId + w) % 11));
+      const flagCount = diff === 5 ? 1 : (diff >= 4 && isFinal ? 2 : 1);
       const enemies = Array.from({ length: waveSize }, function(_, i) {
         return {
           type:      enemyTypeForLevel(i + w),
-          lane:      pickLane(waveSeed + i),
+          lane:      pickWaveLane(waveSeed, i),
           delay:     0,
           equipment: pickEquip(pool, waveSeed + i * 777),
         };
       });
       for (let i = 0; i < flagCount; i++) {
-        enemies.push({ type: 'vex_flag_bearer', lane: pickLane(waveSeed + waveSize + i), delay: 0, equipment: 'bare' });
+        enemies.push({ type: 'vex_flag_bearer', lane: pickWaveLane(waveSeed, waveSize + i), delay: 0, equipment: 'bare' });
       }
 
       waves.push({
@@ -1945,19 +2071,22 @@ GW.ENVIRONMENTS = {
         isHorde:     true,
         warningDelay: 3000,
         flagBearerCount: flagCount,
-        spawnInterval: spawnProfile && spawnProfile.interval,
+        spawnInterval: spawnProfile && (
+          (spawnProfile.waveIntervals && spawnProfile.waveIntervals[w]) ||
+          spawnProfile.interval
+        ),
         enemies:     enemies,
       });
 
       // Between waves: add a pressure scout phase (except after final)
-      if (!isFinal) {
+      if (!isFinal && diff < 5) {
         const pressSeed   = seed + (w + 1) * 55557;
         const pressCount  = Math.max(5, Math.floor(scoutCount / 2));
         const pressDelays = scoutDelays(pressCount, pressSeed, spawnProfile);
         const pressEnemies = pressDelays.map(function(delay, i) {
           return {
             type:      enemyTypeForLevel(i + pressSeed),
-            lane:      pickLane(pressSeed + i),
+            lane:      pickWaveLane(pressSeed, i),
             delay:     delay,
             equipment: pickEquip(pool, pressSeed + i * 1337),
           };
@@ -1973,13 +2102,14 @@ GW.ENVIRONMENTS = {
         : assaultDelays(10, seed + 888888);
       waves.push({
         id: 'wave_boss', label: 'OVERLORD APPROACHES', isMajorWave: true, isBossWave: true,
+        startAfterMs: spawnProfile && spawnProfile.assaultDurationMs,
         spawnInterval: spawnProfile && spawnProfile.interval,
         enemies: bossDelays.map(function(delay, i) {
           return {
-            type:      i === 9 ? 'vex_overlord' : 'vex_elite',
+            type:      diff === 5 ? (i === 0 ? 'vex_overlord' : 'vex_elite') : (i === 9 ? 'vex_overlord' : 'vex_elite'),
             lane:      pickLane(seed + 888888 + i),
             delay:     delay,
-            equipment: i === 9 ? 'bare' : 'tactical_armor',
+            equipment: (diff === 5 ? i === 0 : i === 9) ? 'bare' : 'tactical_armor',
           };
         }),
       });
@@ -1996,12 +2126,13 @@ GW.ENVIRONMENTS = {
   for (let id = 2; id <= 50; id++) {
     if (!L[id]) continue;
     const diff = diffMap[L[id].difficulty] ?? 0;
-    L[id].waves = buildLevelWaves(id, diff, !!L[id].isBossLevel);
+    L[id].waves = buildLevelWaves(id, diff, !!L[id].isBossLevel, GW.DIFFICULTY_PACING[L[id].difficulty]);
     // Update available enemies pool based on level tier
-    if (id >= 41) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike','vex_vehicle_rider','vex_colossus','vex_overlord'];
-    else if (id >= 31) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_jetpack','vex_vehicle_rider','vex_colossus'];
-    else if (id >= 21) L[id].availableEnemies = ['vex_drone','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike','vex_vehicle_rider','vex_colossus'];
-    else if (id >= 11) L[id].availableEnemies = ['vex_drone','vex_runner','vex_elite','vex_advanced','vex_tiny_ship','vex_hover_bike'];
+    if (id >= 41) L[id].availableEnemies = ['vex_drone','crater_raider','beacon_brute','vanta_pouncer','glassback_stalker','skyroot_titan','ion_wing','vex_overlord'];
+    else if (id >= 32) L[id].availableEnemies = ['vex_drone','crater_raider','beacon_brute','vanta_pouncer','glassback_stalker'];
+    else if (id >= 25) L[id].availableEnemies = ['vex_drone','crater_raider','beacon_brute','vanta_pouncer'];
+    else if (id >= 16) L[id].availableEnemies = ['vex_drone','crater_raider','beacon_brute'];
+    else if (id >= 6) L[id].availableEnemies = ['vex_drone','vex_runner','crater_raider'];
     else               L[id].availableEnemies = ['vex_drone','vex_runner'];
   }
 
@@ -2166,7 +2297,7 @@ GW.PROGRESSION_SCHEMA = {
   completedLevels:  [],
   claimedCards:     ['plasma_energy_generator', 'fire_lancer'],
   discoveredEnemies:['vex_drone'],
-  unlockedModes:    ['adventure', 'settings', 'credits'],
+  unlockedModes:    ['adventure', 'extras', 'settings', 'credits'],
   unlockedEnvs:     ['daytime'],
   achievements:     [],
   bestSurvivalScores: {},
@@ -2191,10 +2322,21 @@ GW.ASSETS = {
   SPRITES: {
     plasma_energy_generator: "/assets/sprites/characters/player/plasma_energy_generator.svg",
     fire_lancer:             "/assets/sprites/characters/player/fire_lancer.svg",
-    vex_drone:               "/assets/sprites/characters/enemy/vex_drone.svg",
-    vex_flag_bearer:         "/assets/sprites/characters/enemy/vex_flag_bearer.svg",
+    vex_drone:               "/assets/sprites/characters/enemy/pipkin-scout.svg",
+    vex_flag_bearer:         "/assets/sprites/characters/enemy/signal-bearer.svg",
+    crater_raider:           "/assets/sprites/characters/enemy/crater_raider.svg",
+    beacon_brute:            "/assets/sprites/characters/enemy/beacon-brute.svg",
+    vanta_pouncer:           "/assets/sprites/characters/enemy/vanta-pouncer.svg",
+    glassback_stalker:       "/assets/sprites/characters/enemy/glassback-stalker.svg",
+    skyroot_titan:           "/assets/sprites/characters/enemy/skyroot-titan.svg",
+    ion_wing:                "/assets/sprites/characters/enemy/ion-wing.svg",
+    vex_overlord:            "/assets/sprites/characters/enemy/rift-matriarch.svg",
     sentinel:                null,  // sentinel uses procedural graphics
     creator_bitos:           null,  // Creator Bitos uses procedural graphics
+  },
+  BASIC_ENEMIES: {
+    common: "/assets/sprites/enemies/basic/mosskin-scout.svg",
+    flagBearer: "/assets/sprites/enemies/basic/signal-bearer.svg",
   },
 
   // Full sprite-sheet roster manifest (generated by tools/generate-sprite-sheets.js).
@@ -2276,8 +2418,8 @@ GW.ASSETS = {
 
   // â”€â”€ Effect paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   EFFECTS: {
-    hitSpark:      "/assets/sprites/effects/hit-spark.svg",
-    deathBurst:    "/assets/sprites/effects/death-burst.svg",
+    hitSpark:      "/assets/sprites/effects/resonance-hit.svg",
+    deathBurst:    "/assets/sprites/effects/matriarch-burst.svg",
     plasmaCollect: "/assets/sprites/effects/plasma-collect.svg",
     spawnRing:     "/assets/sprites/effects/spawn-ring.svg",
   },
@@ -2285,8 +2427,8 @@ GW.ASSETS = {
   // â”€â”€ Projectile paths â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   PROJECTILES: {
     fireLance: "/assets/sprites/projectiles/fire-lance-shot.svg",
-    plasma:    "/assets/sprites/projectiles/plasma-shot.svg",
-    bullet:    "/assets/sprites/projectiles/bullet.svg",
+    plasma:    "/assets/sprites/projectiles/ion-lance.svg",
+    bullet:    "/assets/sprites/projectiles/kinetic-bolt.svg",
   },
 };
 

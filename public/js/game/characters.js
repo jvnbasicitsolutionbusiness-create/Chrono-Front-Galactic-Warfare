@@ -3,7 +3,7 @@
  *
  * BATTLEFIELD REVISION:
  *  - Uses GW.CARDS (aliased via GW.CHARACTERS for compat)
- *  - P.E. Regen: genInterval from GW.RESOURCES.REGEN_UNIT_INTERVAL (10s)
+ *  - P.E. Regen: randomized interval from GW.RESOURCES
  *  - Fire-Lance Gunner: first combat unit (10 dmg, 2800ms, 280 range)
  *  - Integrates SpriteRegistry animated drawing
  *  - Supports all card roles
@@ -39,7 +39,7 @@ GW.Character = class Character {
       this.projColor   = 0;
       this.projSize    = 0;
       this.isSupport   = true;
-      // Use config value (10000ms = 10s per spec)
+      // Use the configured midpoint as the initial generator interval.
       this.genInterval = def.genInterval || GW.RESOURCES.REGEN_UNIT_INTERVAL;
       this.genAmount   = def.genAmount   || GW.RESOURCES.REGEN_UNIT_AMOUNT;
       this.genTimer    = this.genInterval;  // start at full interval — no instant generation
@@ -207,11 +207,11 @@ GW.Character = class Character {
       this._updateCardAbility(delta, enemies, characters || []);
 
       if (this.isEnergyUnit) {
-      // v1.0.1: 15–20 s interval from config (was 10–12 s).
+      // The global range keeps every generator on the same 8–12 s cadence.
       // The timer counts DOWN; when it hits zero we begin the charge phase.
       const genMultiplier = this.genRateMultiplier || 1;
-      const genMin = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 15000) / genMultiplier;
-      const genMax = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 20000) / genMultiplier;
+      const genMin = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 20000) / genMultiplier;
+      const genMax = ((GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MAX) || 25000) / genMultiplier;
 
       this.genTimer -= delta;
 

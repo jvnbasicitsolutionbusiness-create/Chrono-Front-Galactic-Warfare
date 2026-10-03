@@ -12,11 +12,13 @@
 
 /* global GW */
 
+const GUEST_STORAGE_KEY = 'gwr_guest_progression_v1';
+
 GW.ProgressionManager = class ProgressionManager {
   constructor() {
     this.isGuest = this._isGuestMode();
-    this._key = this.isGuest ? null : this._getStorageKey();
-    this.state = this.isGuest ? this._defaultState() : this._load();
+    this._key = this.isGuest ? GUEST_STORAGE_KEY : this._getStorageKey();
+    this.state = this._load();
   }
 
   _isGuestMode() {
@@ -67,7 +69,7 @@ GW.ProgressionManager = class ProgressionManager {
       completedLevels:  [],
       claimedCards:     (schema.claimedCards || ['plasma_energy_generator', 'fire_lancer']).slice(),
       discoveredEnemies:['vex_drone'],
-      unlockedModes:    ['adventure', 'settings', 'credits'],
+      unlockedModes:    ['adventure', 'extras', 'settings', 'credits'],
       unlockedEnvs:     ['daytime'],
       achievements:     [],
       bestSurvivalScores: {},
@@ -82,7 +84,6 @@ GW.ProgressionManager = class ProgressionManager {
   }
 
   saveLocal() {
-    if (this.isGuest || this._isGuestMode()) return;
     if (!this._key) {
       console.warn('[Progression] Save skipped because no registered account email is available.');
       return;
@@ -93,8 +94,8 @@ GW.ProgressionManager = class ProgressionManager {
   }
 
   save() {
-    if (this.isGuest || this._isGuestMode()) return;
     this.saveLocal();
+    if (this.isGuest || this._isGuestMode()) return;
     // Async Sheets sync (fire-and-forget) — uses sheetsClient which also aliases firebaseClient
     const client = (window.GW && window.GW.sheetsClient) || (window.GW && window.GW.firebaseClient);
     if (client && client.ready) {
@@ -194,7 +195,8 @@ GW.ProgressionManager = class ProgressionManager {
 
   // ── Modes ─────────────────────────────────────────────────
   isModeUnlocked(modeId) {
-    if (this.isGuest || this._isGuestMode()) return ['adventure', 'settings', 'credits'].includes(modeId);
+    if (modeId === 'extras') return true;
+    if (this.isGuest || this._isGuestMode()) return ['adventure', 'extras', 'settings', 'credits'].includes(modeId);
     return this.state.unlockedModes.includes(modeId);
   }
 

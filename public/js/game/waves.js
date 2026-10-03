@@ -168,7 +168,7 @@ GW.WaveManager = class WaveManager {
   // ── MODE 2: Half-HP chain (scouts) ───────────────────────
   // v1.0.1 rule:
   //   First 5 entries  → wait for previous alien to reach ≤ 50% HP before spawning next.
-  //   Entries 6+       -> spawn freely on a randomised 30-50 s interval.
+  //   Entries 6+       -> spawn freely on the wave's configured interval.
   _beginHalfHpChain(enemies, waveDef) {
     this._chainIndex      = 0;
     this._chainEnemy      = null;
@@ -302,10 +302,10 @@ GW.WaveManager = class WaveManager {
      });
      const pending = enemies.map((entry, index) => ({ entry, index }))
        .filter(item => item.entry.type !== 'vex_flag_bearer');
-     this._scheduleHordeBatch(pending, waveDef);
+     this._scheduleHordeBatch(pending, waveDef, true);
    }
 
-  _scheduleHordeBatch(pending, waveDef) {
+  _scheduleHordeBatch(pending, waveDef, isFirstBatch) {
     if (!pending.length) {
       this.scene.time.delayedCall(500, () => {
         if (this.state === 'spawning') this.state = 'clearing';
@@ -313,7 +313,10 @@ GW.WaveManager = class WaveManager {
       return;
     }
     const arrival = this._chooseArrivalGroup(pending.length, waveDef);
-    const timer = this.scene.time.delayedCall(arrival.delay, () => {
+    const delay = isFirstBatch
+      ? (waveDef.firstHordeDelay == null ? 750 : Math.max(0, waveDef.firstHordeDelay))
+      : arrival.delay;
+    const timer = this.scene.time.delayedCall(delay, () => {
       if (this.state !== 'spawning') return;
       const batch = pending.splice(0, arrival.size);
       batch.forEach(({ entry, index }) => {
@@ -326,7 +329,7 @@ GW.WaveManager = class WaveManager {
           if (this.state === 'spawning') this.state = 'clearing';
         });
       } else {
-        this._scheduleHordeBatch(pending, waveDef);
+        this._scheduleHordeBatch(pending, waveDef, false);
       }
     });
     this._spawnTimers.push(timer);
@@ -335,13 +338,37 @@ GW.WaveManager = class WaveManager {
   // ── Spawn a single enemy ─────────────────────────────────
   // Returns the Enemy instance so callers can track it.
   _spawnEnemy(entry, waveDef) {
-    const enemy = GW.EnemyFactory.create(this.scene, entry.type, entry.lane);
+    const lane = Number.isInteger(entry.lane) ? entry.lane : GW.LANE_PRESSURE.pickLane(waveDef || {}, 1);
+    const enemy = GW.EnemyFactory.create(this.scene, entry.type, lane, {
+      waveDef,
+      spawnDistance: entry.spawnDistance,
+      warningTime: entry.warningTime,
+      timeToImpact: entry.timeToImpact,
+    });
     if (!enemy) return null;
+    if (GW.progression && enemy.id) GW.progression.discoverEnemy(enemy.id);
 
     // Equipment
     if (entry.equipment && GW.ALIEN_EQUIPMENT) {
       const equipDef = GW.ALIEN_EQUIPMENT[entry.equipment];
       if (equipDef) enemy.applyEquipment(equipDef);
+    }
+
+    if (enemy.warningTime > 0) {
+      const warning = this.scene.add.rectangle(
+        GW.BOARD.ENEMY_SPAWN_X + 30,
+        GW.BOARD.TOP_OFFSET + (lane - 0.5) * GW.BOARD.LANE_HEIGHT,
+        18, 42, 0xef4444, 0.9
+      ).setDepth(18);
+      this.scene.tweens.add({
+        targets: warning,
+        alpha: 0,
+        scaleX: 1.5,
+        scaleY: 1.5,
+        duration: Math.min(700, Math.max(260, enemy.warningTime * 0.5)),
+        ease: 'Power2',
+        onComplete: () => warning.destroy(),
+      });
     }
 
     // Flag alien callback (fires warning banner in scenes.js)
@@ -376,7 +403,10 @@ GW.WaveManager = class WaveManager {
       this.state = 'between';
       return;
     }
-    this.betweenTimer = GW.WAVES.BETWEEN_WAVE_DELAY;
+    const bossStartDelay = nextWave && nextWave.isBossWave && Number.isFinite(nextWave.startAfterMs)
+      ? Math.max(0, nextWave.startAfterMs - (this.scene._gameRuntimeMs || 0))
+      : 0;
+    this.betweenTimer = Math.max(GW.WAVES.BETWEEN_WAVE_DELAY, bossStartDelay);
     this.state = 'between';
   }
 

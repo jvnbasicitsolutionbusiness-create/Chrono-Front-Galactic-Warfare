@@ -99,6 +99,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this._shovelMode     = false;
     this._paused         = false;
     this._reconDone      = false;
+    this._gameRuntimeMs  = 0;
+    this._runtimeStarted = false;
+    this._missionDurationMs = 0;
+    this._pendingVictory = false;
   }
 
   create() {
@@ -108,6 +112,9 @@ GW.GameScene = class GameScene extends Phaser.Scene {
 
     const levelData = GW.LEVELS[this.levelId] || GW.LEVELS[1];
     const envId     = levelData.environment || 'daytime';
+    this._missionDurationMs = levelData.durationMs ||
+      (GW.DIFFICULTY_PACING[levelData.difficulty] && GW.DIFFICULTY_PACING[levelData.difficulty].durationMs) ||
+      4 * 60 * 1000;
     if (window.GWAudio) window.GWAudio.setScene('battle', envId);
     const env       = GW.ENVIRONMENTS[envId] || GW.ENVIRONMENTS.daytime;
 
@@ -130,7 +137,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this.playerState       = new GW.PlayerState();
     this.playerState.levelId = this.levelId;
     this.resourceManager   = new GW.ResourceManager(this);
-    this.resourceManager.energy = levelData.startingEnergy || GW.RESOURCES.STARTING_ENERGY;
+    this.resourceManager.energy = GW.RESOURCES.STARTING_ENERGY;
     this.projectileManager = new GW.ProjectileManager(this);
     this.combatManager     = new GW.CombatManager(this, this.projectileManager, this.resourceManager, this.playerState);
     this.levelManager      = new GW.LevelManager();
@@ -171,8 +178,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     // Wave manager is NOT started here — it starts only after the player
     // clicks the DEPLOY button in the briefing overlay. This ensures the
     // 20-second preparation countdown doesn't begin until the player is ready.
-    this.resourceManager.startRegen();
+    this.resourceManager.startOrbSpawning();
     this._wavesStarted = !!(restoredBattle && this.waveManager.started);
+    this._runtimeStarted = this._wavesStarted;
+    this.uiManager.updateRuntime(this._gameRuntimeMs);
     if (this.uiManager.energyText) this.uiManager.energyText.setText(String(this.resourceManager.energy));
 
     // ── Animated environment (continuous) ──────────────────
@@ -346,6 +355,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   _onDeployClicked() {
     if (this._wavesStarted) return; // guard against double-fire
     this._wavesStarted = true;
+    this._runtimeStarted = true;
 
     // Show the "20 sec to prepare" banner immediately on Deploy
     if (this.uiManager && this.uiManager.showBanner) {
@@ -930,23 +940,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════
   _wireCallbacks(levelData) {
     // DECOUPLED DESIGN:
-    //   totalWaves  = internal WaveManager wave count (scouts, pressure, majors, final)
-    //   flagCount   = visual marker count on the timeline bar (1 for daytime easy levels)
-    // The alien-head position is driven ONLY by onAlienSpawned (always forward, never backward).
-    // onWaveStart / onWaveClear only control banners and marker highlights — not head position.
-    const totalWaves = levelData.waves ? levelData.waves.length : 1;
-
-    // Count major/final waves — used to distribute flag highlights evenly
-    // across the VISUAL flag count (flagCount), NOT the raw major-wave count.
-    //
-    // Example: Level 1 has 3 major waves (wave_1, wave_2, wave_final) but only
-    // 1 visual flag on the timeline. Dividing by 3 would produce fractions
-    // 0.33 / 0.67 / 1.0, and highlightTimelineMarker's nearest-match search
-    // would snap the head to the single flag at 0.33 — a premature jump.
-    //
-    // Fix: use flagCount (= uiManager._totalWaves) as the denominator so each
-    // flag lights up at exactly the right moment. For 1 flag + 3 major waves,
-    // only clearing the 3rd (final) major wave fires the highlight at 1.0.
+    // Count major waves to light the visual timeline flags as each sector clears.
     const majorWaves = levelData.waves
       ? levelData.waves.filter(w => w.isMajorWave || w.isFinalWave)
       : [];
@@ -954,8 +948,15 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     const flagCount       = this.uiManager._totalWaves || 1;   // visual marker count
     let   majorWavesCleared = 0;
 
-    // ── onWaveStart: no banners — head position is driven by onAlienSpawned only ─
+    // ── onWaveStart: no banners; timeline movement is driven by elapsed time ─
     this.waveManager.onWaveStart = (idx, waveDef) => { /* intentionally silent */ };
+    this.waveManager.onAlienSpawned = (spawned, total) => {
+      const timeProgress = this._missionDurationMs > 0
+        ? this._gameRuntimeMs / this._missionDurationMs
+        : 0;
+      const spawnProgress = total > 0 ? (spawned / total) * 0.9 : 0;
+      this.uiManager.updateTimelineHead(Math.max(timeProgress, spawnProgress));
+    };
 
     // ── onWaveClear: light up the matching flag — NEVER pull head back ─
     this.waveManager.onWaveClear = (idx) => {
@@ -965,11 +966,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
         majorWavesCleared++;
         const prevFlagIndex = Math.floor((majorWavesCleared - 1) * flagCount / majorWaveCount);
         const currFlagIndex = Math.floor(majorWavesCleared       * flagCount / majorWaveCount);
-        if (currFlagIndex > prevFlagIndex) {
-          const clampedIndex   = Math.min(currFlagIndex, flagCount);
-          const markerFraction = clampedIndex / flagCount;
-          this.uiManager.highlightTimelineMarker(markerFraction);
-        }
+        if (currFlagIndex > prevFlagIndex) this.uiManager.highlightTimelineMarker(currFlagIndex / flagCount);
       }
       // No SECTOR CLEAR banner — silent between waves
     };
@@ -979,10 +976,6 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     this.waveManager.onHordeWarning = () => {
       this.uiManager.showBigBanner('⚠  A HUGE HORDE OF ALIENS IS APPROACHING!', 2800);
     };
-    this.waveManager.onAlienSpawned = (spawned, total) => {
-      if (total > 0) this.uiManager.updateTimelineHead(spawned / total);
-    };
-
     this.combatManager.onEnemyKilled = en => {
       if (window.GWAudio) window.GWAudio.play('alien-death');
       this.uiManager.updateScore(this.playerState.score);
@@ -1076,12 +1069,8 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     if (character.isSupport && character.role === 'energy') {
       // P.E. Generator now spawns a clickable orb instead of directly adding energy.
       // Player must click the orb to collect it.
-      character.onGenerateEnergy = (amount, cx, cy) => {
-        if (this.resourceManager.spawnGeneratorOrb) {
-          this.resourceManager.spawnGeneratorOrb(cx || character.x, cy || character.y);
-        } else {
-          this.resourceManager.earn(amount); // fallback
-        }
+      character.onGenerateEnergy = (_amount, cx, cy) => {
+        this.resourceManager.spawnGeneratorOrb(cx || character.x, cy || character.y);
       };
       // Randomize initial timer so all generators don't tick simultaneously
       const genMin = (GW.RESOURCES && GW.RESOURCES.REGEN_UNIT_INTERVAL_MIN) || 8000;
@@ -1138,9 +1127,17 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════
   _triggerWin() {
     if (this._gameOver || this._gameWon) return;
+    if (this._gameRuntimeMs < this._missionDurationMs) {
+      if (!this._pendingVictory) {
+        this._pendingVictory = true;
+        this.uiManager.showBigBanner('HOSTILES NEUTRALIZED — SECURING SECTOR', 2600);
+      }
+      return;
+    }
+    this._pendingVictory = false;
     this._clearBattleSnapshot();
     this._gameWon = true;
-    this.resourceManager.stopRegen();
+    this.resourceManager.stopOrbSpawning();
 
     // 1. Mark level complete and unlock the next level in progression
     if (GW.progression) GW.progression.completeLevel(this.levelId);
@@ -1330,8 +1327,9 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   _triggerLose() {
     if (this._gameOver || this._gameWon) return;
     this._clearBattleSnapshot();
+    this._pendingVictory = false;
     this._gameOver = true;
-    this.resourceManager.stopRegen();
+    this.resourceManager.stopOrbSpawning();
     this.cameras.main.shake(380, 0.012);
     this.uiManager.showBanner('BASE BREACHED!', GW.UI_COLORS.TEXT_DANGER, 900);
     this.time.delayedCall(1000, () => {
@@ -1348,8 +1346,12 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     window.location.replace('game.html?level=' + this.levelId);
   }
 
-  _goToMenu() {
-    this._saveBattleSnapshot();
+  async _goToMenu() {
+    try {
+      await this._saveBattleSnapshot();
+    } catch (error) {
+      console.error('[Game] Battle checkpoint could not be completed before leaving.', error);
+    }
     window.__GW_ALLOW_NAVIGATION__ = true;
     sessionStorage.removeItem('gw_menu_return');
     window.location.replace('index.html');
@@ -1358,15 +1360,17 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   async _saveBattleSnapshot(force) {
     const progression = GW.progression;
     const token = localStorage.getItem('gw_session_token') || localStorage.getItem('gw_id_token');
-    if (!progression || progression.isGuest || !token || this._gameOver || this._gameWon || !this.combatManager) return false;
+    if (!progression || this._gameOver || this._gameWon || !this.combatManager) return false;
     if (this._battleSnapshotSaved && !force) return this._battleSnapshotSavePromise || true;
 
     const snapshot = {
       levelId: this.levelId,
+      gameRuntimeMs: this._gameRuntimeMs,
       energy: this.resourceManager.energy,
       score: this.playerState.score,
       enemiesDefeated: this.playerState.enemiesDefeated,
       timelineProgress: this.uiManager._currentProgress || 0,
+      pendingVictory: this._pendingVictory,
       wave: {
         started: this.waveManager.started,
         currentWaveIndex: this.waveManager.currentWaveIndex,
@@ -1438,6 +1442,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     progression.saveLocal();
     this._battleSnapshotSaved = true;
     this._battleSnapshotSavePromise = (async () => {
+      if (progression.isGuest || !token) return true;
       const client = GW.sheetsClient;
       if (!client) return true;
       if (!client.ready && client.init) {
@@ -1453,6 +1458,7 @@ GW.GameScene = class GameScene extends Phaser.Scene {
       return client.saveProgression(user.email, progression.state);
     })().catch(error => {
       console.warn('[Game] Cloud checkpoint failed; local checkpoint remains available.', error);
+      this._battleSnapshotSaved = false;
       return false;
     });
     return this._battleSnapshotSavePromise;
@@ -1461,9 +1467,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   _restoreBattleSnapshot() {
     const progression = GW.progression;
     const snapshot = progression && progression.state.activeBattle;
-    if (!snapshot || snapshot.levelId !== this.levelId || progression.isGuest) return false;
+    if (!snapshot || snapshot.levelId !== this.levelId) return false;
 
     this.resourceManager.energy = snapshot.energy;
+    this._gameRuntimeMs = Math.max(0, Number(snapshot.gameRuntimeMs) || 0);
     this.playerState.score = snapshot.score || 0;
     this.playerState.enemiesDefeated = snapshot.enemiesDefeated || 0;
     (snapshot.characters || []).forEach(saved => {
@@ -1541,9 +1548,11 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     const savedWave = snapshot.wave || {};
     this.waveManager.restoreSnapshot(savedWave);
     this._wavesStarted = this.waveManager.started;
+    this._pendingVictory = !!snapshot.pendingVictory || this.waveManager.isComplete;
     if (this.uiManager.energyText) this.uiManager.energyText.setText(String(this.resourceManager.energy));
     this.uiManager.updateScore(this.playerState.score);
-    this.uiManager.updateTimelineHead(snapshot.timelineProgress || 0);
+    this.uiManager.updateTimelineHead(Math.min(0.99, this._gameRuntimeMs / this._missionDurationMs));
+    this.uiManager.updateRuntime(this._gameRuntimeMs);
     return true;
   }
 
@@ -1562,6 +1571,15 @@ GW.GameScene = class GameScene extends Phaser.Scene {
     if (this._gameOver || this._gameWon) return;
     if (this._paused || this.uiManager.isPaused) return;
 
+    if (this._runtimeStarted) {
+      this._gameRuntimeMs += delta;
+      this.uiManager.updateRuntime(this._gameRuntimeMs);
+      this.uiManager.updateTimelineHead(Math.min(0.99, this._gameRuntimeMs / this._missionDurationMs));
+      if (this._pendingVictory && this._gameRuntimeMs >= this._missionDurationMs) {
+        this._triggerWin();
+        return;
+      }
+    }
     this.waveManager.update(delta);
     this.combatManager.update(delta);
     if (this.sentinelMgr) this.sentinelMgr.update(this.combatManager.enemies);
@@ -1576,6 +1594,10 @@ GW.GameScene = class GameScene extends Phaser.Scene {
   // ══════════════════════════════════════════════════════════
   // ── Static helper: flag count by environment + level ──
   static _getFlagCount(envId, levelId) {
+    const level = GW.LEVELS && GW.LEVELS[levelId];
+    if (level && level.isBossLevel) return 6;
+    const flagsByDifficulty = { easy: 1, moderate: 2, medium: 3, hard: 4, expert: 5 };
+    if (level && flagsByDifficulty[level.difficulty]) return flagsByDifficulty[level.difficulty];
     if (!levelId || levelId <= 6) return 1;
     if (levelId <= 14) return 2;
     if (levelId <= 23) return 3;

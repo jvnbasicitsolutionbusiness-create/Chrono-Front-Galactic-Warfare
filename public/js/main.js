@@ -20,6 +20,10 @@
     return;
   }
 
+  if (!GW.progression && GW.ProgressionManager) {
+    GW.progression = new GW.ProgressionManager();
+  }
+
   let pixelArt = GW.DISPLAY.PIXEL_ART !== false;
   const savedProgression = GW.progression && GW.progression.state;
   if (savedProgression && savedProgression.settings && savedProgression.settings.pixelArt != null) {
