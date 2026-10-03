@@ -101,17 +101,20 @@
 
           <div class="auth-field">
             <label class="auth-label" for="loginPassword">PASSWORD</label>
-            <input
-              class="auth-input"
-              type="password"
-              id="loginPassword"
-              name="password"
-              autocomplete="current-password"
-              placeholder="••••••••"
-              required
-              maxlength="128"
-              aria-describedby="loginPwErr"
-            />
+            <div class="auth-password-control">
+              <input
+                class="auth-input"
+                type="password"
+                id="loginPassword"
+                name="password"
+                autocomplete="current-password"
+                placeholder="••••••••"
+                required
+                maxlength="128"
+                aria-describedby="loginPwErr"
+              />
+              <button class="auth-password-toggle" type="button" data-password-toggle aria-controls="loginPassword" aria-pressed="false">SHOW</button>
+            </div>
             <span class="auth-field-error" id="loginPwErr" role="alert"></span>
           </div>
 
@@ -178,18 +181,21 @@
 
           <div class="auth-field">
             <label class="auth-label" for="regPassword">PASSWORD</label>
-            <input
-              class="auth-input"
-              type="password"
-              id="regPassword"
-              name="new-password"
-              autocomplete="new-password"
-              placeholder="Minimum 12 characters"
-              required
-              minlength="12"
-              maxlength="128"
-              aria-describedby="regPwErr"
-            />
+            <div class="auth-password-control">
+              <input
+                class="auth-input"
+                type="password"
+                id="regPassword"
+                name="new-password"
+                autocomplete="new-password"
+                placeholder="Minimum 12 characters"
+                required
+                minlength="12"
+                maxlength="128"
+                aria-describedby="regPwErr"
+              />
+              <button class="auth-password-toggle" type="button" data-password-toggle aria-controls="regPassword" aria-pressed="false">SHOW</button>
+            </div>
             <!-- Password strength bar -->
             <div class="auth-strength" aria-hidden="true">
               <div class="auth-strength-bar" id="regStrengthBar"></div>
@@ -199,17 +205,20 @@
 
           <div class="auth-field">
             <label class="auth-label" for="regConfirm">CONFIRM PASSWORD</label>
-            <input
-              class="auth-input"
-              type="password"
-              id="regConfirm"
-              name="confirm-password"
-              autocomplete="new-password"
-              placeholder="Repeat password"
-              required
-              maxlength="128"
-              aria-describedby="regConfirmErr"
-            />
+            <div class="auth-password-control">
+              <input
+                class="auth-input"
+                type="password"
+                id="regConfirm"
+                name="confirm-password"
+                autocomplete="new-password"
+                placeholder="Repeat password"
+                required
+                maxlength="128"
+                aria-describedby="regConfirmErr"
+              />
+              <button class="auth-password-toggle" type="button" data-password-toggle aria-controls="regConfirm" aria-pressed="false">SHOW</button>
+            </div>
             <span class="auth-field-error" id="regConfirmErr" role="alert"></span>
           </div>
 

@@ -56,12 +56,69 @@
 <body class="game-page">
 
   <div id="game-container" role="main" aria-label="Game battlefield"></div>
+  <button id="fullscreen-toggle" type="button" aria-label="Enter full screen" title="Enter full screen" hidden>
+    <span aria-hidden="true">⛶</span>
+    <span class="sr-only">Full screen</span>
+  </button>
+  <p id="fullscreen-status" class="sr-only" role="status" aria-live="polite"></p>
+  <script>
+  (function () {
+    var button = document.getElementById('fullscreen-toggle');
+    var status = document.getElementById('fullscreen-status');
+    var target = document.getElementById('game-container');
+    if (!button || !target) return;
 
-  <div id="orientation-prompt" role="status" aria-live="polite">
-    <div class="orientation-prompt__icon" aria-hidden="true">↻</div>
-    <h1>ROTATE TO LANDSCAPE</h1>
-    <p>Turn your phone or tablet sideways to deploy on the full battlefield.</p>
-  </div>
+    function isFullscreen() {
+      return document.fullscreenElement === target || document.webkitFullscreenElement === target;
+    }
+    function updateButton() {
+      var label = isFullscreen() ? 'Exit full screen' : 'Enter full screen';
+      button.setAttribute('aria-label', label);
+      button.title = label;
+    }
+    function showError(error) {
+      console.warn('[GW] Full-screen mode is unavailable:', error);
+      if (status) status.textContent = 'Full-screen mode is unavailable in this browser.';
+    }
+
+    function toggleFullscreen() {
+      var action;
+      var supported = false;
+      try {
+        if (isFullscreen()) {
+          if (document.exitFullscreen) { action = document.exitFullscreen(); supported = true; }
+          else if (document.webkitExitFullscreen) { action = document.webkitExitFullscreen(); supported = true; }
+        } else {
+          if (target.requestFullscreen) { action = target.requestFullscreen(); supported = true; }
+          else if (target.webkitRequestFullscreen) { action = target.webkitRequestFullscreen(); supported = true; }
+        }
+      } catch (error) {
+        showError(error);
+        return;
+      }
+      if (!supported) {
+        showError(new Error('Fullscreen API is not supported.'));
+      } else if (action && typeof action.then === 'function') {
+        action.then(updateButton).catch(showError);
+      } else {
+        window.setTimeout(updateButton, 0);
+      }
+    }
+    window.GWFullscreen = { toggle: toggleFullscreen };
+    button.addEventListener('click', toggleFullscreen);
+    window.addEventListener('gw:pause-open', function () { button.hidden = false; });
+    window.addEventListener('gw:pause-close', function () { button.hidden = true; });
+    document.addEventListener('keydown', function (event) {
+      var targetTag = event.target && event.target.tagName;
+      if (event.key.toLowerCase() !== 'f' || event.altKey || event.ctrlKey || event.metaKey ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].indexOf(targetTag) !== -1) return;
+      event.preventDefault();
+      toggleFullscreen();
+    });
+    document.addEventListener('fullscreenchange', updateButton);
+    document.addEventListener('webkitfullscreenchange', updateButton);
+  })();
+  </script>
 
   <!-- Loading screen -->
   <div id="load-screen" aria-live="polite">

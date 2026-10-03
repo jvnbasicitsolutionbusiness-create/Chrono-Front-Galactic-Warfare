@@ -127,7 +127,7 @@ const GAME_CUES = [
   'card-select', 'card-deselect', 'card-place', 'coin-collect', 'plasma-collect', 'battle-deploy', 'battle-menu',
   'pause-resume', 'pause-restart', 'pause-quit', 'victory-claim', 'victory-next', 'victory-replay',
   'victory-menu', 'defeat-retry', 'defeat-menu', 'alien-death', 'defender-death',
-  'fire-lance-windup', 'military-melee', 'alien-melee', 'alien-bullet', 'alien-laser', 'alien-fire', 'alien-plasma',
+  'fire-lance-windup', 'military-melee', 'alien-step', 'alien-melee', 'alien-bullet', 'alien-laser', 'alien-fire', 'alien-plasma',
   'fire-lance-shot', 'fire-impact',
   ...[
     'fire_lance', 'hand_cannon', 'musket', 'arquebus', 'rifle', 'sniper_rifle', 'mortar',
@@ -425,7 +425,9 @@ function composeCharacterTrack(charId, isAlien) {
 // ─── Standard SFX Cue Composer ────────────────────────────────────────────────
 function composeCue(cue) {
   const seed = hashString(cue);
-  const duration = cue === 'fire-lance-shot' ? 0.42
+  const duration = cue === 'alien-step' ? 0.19
+    : cue === 'alien-death' ? 0.58
+      : cue === 'fire-lance-shot' ? 0.42
     : cue === 'fire-impact' ? 0.34
       : cue.startsWith('ui-') ? 0.15 + (seed % 17) * 0.011
         : 0.24 + (seed % 19) * 0.016;
@@ -460,7 +462,16 @@ function composeCue(cue) {
       const noise = voice === 0 ? (noiseRandom() * 2 - 1) : 0;
       const transient = fireShot ? noise * Math.exp(-time * 24) * 0.7
         : fireImpact ? noise * Math.exp(-time * 14) * 0.9 : 0;
-      const sample = (harmonics + transient) * envelope;
+      const alienCue = cue.startsWith('alien-');
+      const alienNoise = (noiseRandom() * 2 - 1) * Math.exp(-time * (cue === 'alien-death' ? 5 : 30));
+      const bioPulse = Math.sin(phase * (cue === 'alien-step' ? 0.48 : 1.6))
+        + Math.sin(phase * 2.13) * 0.18;
+      const alienSample = cue === 'alien-step'
+        ? bioPulse * Math.exp(-time * 19) * 0.55 + alienNoise * 0.32
+        : cue === 'alien-death'
+          ? bioPulse * Math.exp(-time * 4.8) * 0.6 + alienNoise * 0.42
+          : bioPulse * envelope * 0.7 + alienNoise * envelope * 0.25;
+      const sample = alienCue ? alienSample : (harmonics + transient) * envelope;
       channel.left[i] += sample * leftGain;
       channel.right[i] += sample * rightGain;
     }
@@ -508,6 +519,14 @@ function writeWav(filePath, channel, sampleCount, fadeDuration = 0.08) {
 }
 
 // ─── Execution ────────────────────────────────────────────────────────────────
+if (process.argv.includes('--alien-sfx-only')) {
+  fs.mkdirSync(SFX_DIR, { recursive: true });
+  for (const cue of ['alien-step', 'alien-melee', 'alien-bullet', 'alien-laser', 'alien-fire', 'alien-plasma', 'alien-death']) {
+    const { channel, sampleCount } = composeCue(cue);
+    writeWav(path.join(SFX_DIR, `${cue}.wav`), channel, sampleCount, 0.018);
+    console.log(`[ALIEN SFX] Regenerated ${cue}.wav`);
+  }
+} else {
 console.log('=== GALACTIC WARFARE: GENERATING AUDIO ASSETS ===');
 
 // 1. Generate 8 Cinematic Background Music Tracks
@@ -561,3 +580,4 @@ for (const cue of [...new Set([...UI_CUES, ...GAME_CUES])]) {
 }
 console.log(`[SFX] Generated all UI, weapon, and battle event audio cues`);
 console.log('=== AUDIO GENERATION COMPLETE ===');
+}

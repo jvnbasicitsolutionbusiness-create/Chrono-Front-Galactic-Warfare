@@ -180,10 +180,9 @@
 
         <!-- Row: EXTRAS + SETTINGS -->
         <div class="menu-btn-row">
-          <button class="menu-btn menu-btn--secondary menu-btn--lockable" id="btnExtras" aria-label="Extras">
+          <button class="menu-btn menu-btn--secondary" id="btnExtras" aria-label="Extras">
             <span class="btn-icon">📡</span>
             <span class="btn-label">EXTRAS</span>
-            <span class="btn-lock-icon" id="lockExtras" aria-hidden="true">🔒</span>
           </button>
           <button class="menu-btn menu-btn--secondary" id="btnSettings" aria-label="Settings">
             <span class="btn-icon">⚙</span>
@@ -358,9 +357,9 @@
   </div>
 
   <!-- Extras -->
-  <div class="overlay" id="extrasOverlay" role="dialog" aria-modal="true" aria-labelledby="exTitle" hidden>
+  <div class="overlay" id="creditsOverlay" role="dialog" aria-modal="true" aria-labelledby="creditsTitle" hidden>
     <div class="overlay-box overlay-box--wide">
-      <h2 class="overlay-title" id="exTitle">📡 EXTRAS</h2>
+      <h2 class="overlay-title" id="creditsTitle">🏅 CREDITS &amp; GAME INFORMATION</h2>
 
       <!-- Tab nav -->
       <div class="extras-tabs" role="tablist" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
@@ -468,14 +467,14 @@
         </div>
       </div>
 
-      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnExtrasClose" aria-label="Close" style="margin-top:14px">
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnCreditsClose" aria-label="Close credits" style="margin-top:14px">
         <span class="btn-label">BACK</span>
       </button>
     </div>
   </div>
 
   <script>
-  /* Extras tab switcher — inline, no framework needed */
+  /* Credits tab switcher — inline, no framework needed */
   (function () {
     document.addEventListener('DOMContentLoaded', function () {
       var btns   = document.querySelectorAll('.extras-tab-btn');
@@ -547,18 +546,21 @@
   </div>
 
   <!-- Credits -->
-  <div class="overlay" id="creditsOverlay" role="dialog" aria-modal="true" aria-labelledby="creditsTitle" hidden>
+  <div class="overlay" id="extrasOverlay" role="dialog" aria-modal="true" aria-labelledby="extrasTitle" hidden>
     <div class="overlay-box overlay-box--wide">
-      <h2 class="overlay-title" id="creditsTitle">Credits</h2>
-      <div class="credits-body">
-        <p><strong>Game Design &amp; Development</strong><br/>Galactic Warfare: Defense for Planet Earth Team</p>
-        <p><strong>Engine</strong><br/>Phaser 3 (MIT License)</p>
-        <p><strong>Server</strong><br/>Express.js / Node.js</p>
-        <p><strong>Database</strong><br/>Google Sheets via Google Apps Script</p>
-        <p><strong>All game content is 100% original.</strong><br/>No copyrighted assets from any commercial game were used.</p>
-        <p class="credits-note">Part 1 of 8 · v1.0.1</p>
+      <h2 class="overlay-title" id="extrasTitle">📡 FIELD DATABASE</h2>
+      <p class="overlay-subtitle">Only military cards you have unlocked and alien variants that have appeared are listed here.</p>
+      <div class="extras-summary" style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0 14px;color:#d1fae5">
+        <div class="extras-count"><strong id="extrasMilitaryCount">0 / 0</strong><span>Military cards unlocked</span></div>
+        <div class="extras-count"><strong id="extrasAlienCount">0 / 0</strong><span>Alien variants encountered</span></div>
       </div>
-      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnCreditsClose" aria-label="Close credits">
+      <div id="extrasCatalogContent" style="overflow-y:auto;max-height:350px">
+        <h3 style="color:#86efac;margin:12px 0 4px">🪖 MILITARY CARDS</h3>
+        <div class="chars-grid" id="extrasMilitaryGrid" aria-live="polite"></div>
+        <h3 style="color:#c4b5fd;margin:12px 0 4px">👽 ALIEN VARIANTS</h3>
+        <div class="chars-grid" id="extrasAliensGrid" aria-live="polite"></div>
+      </div>
+      <button class="menu-btn menu-btn--primary overlay-close-btn" id="btnExtrasClose" aria-label="Close Extras">
         <span class="btn-label">CLOSE</span>
       </button>
     </div>
@@ -660,6 +662,7 @@
   };
   window.gwLogout = async function () {
     var token = localStorage.getItem('gw_session_token') || localStorage.getItem('gw_id_token');
+    var isGuest = sessionStorage.getItem('gw_mode') === 'guest';
     if (window.GW && window.GW.progression && !window.GW.progression.isGuest) {
       window.GW.progression.save();
       var client = window.GW.sheetsClient;
@@ -680,6 +683,7 @@
     sessionStorage.removeItem('gw_entry_authorized');
     sessionStorage.removeItem('gw_mode');
     sessionStorage.removeItem('gw_guess_mode');
+    if (isGuest) localStorage.removeItem('gwr_guest_progression_v1');
     window.location.replace('auth.html');
   };
   </script>
